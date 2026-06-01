@@ -1,3 +1,3 @@
 # MEMORY.md - Long-Term Personal Context
 
-_Reviewed 2026-05-31. Clean — no entries to move. Keep procedural/environment-specific operational notes in TOOLS.md or relevant skills, not here._
+_Reviewed 2026-06-01. Clean — no entries to move. Keep procedural/environment-specific operational notes in TOOLS.md or relevant skills, not here._
