@@ -1,0 +1,47 @@
+import { STORAGE_KEY, defaultData } from "./defaults.js";
+
+export const dataStore = {
+  load() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultData();
+    try {
+      return mergeData(defaultData(), JSON.parse(raw));
+    } catch {
+      return defaultData();
+    }
+  },
+
+  save(data) {
+    const next = { ...data, updatedAt: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return next;
+  },
+
+  export(data) {
+    return JSON.stringify({ ...data, exportedAt: new Date().toISOString() }, null, 2);
+  },
+
+  import(raw) {
+    const parsed = JSON.parse(raw);
+    return this.save(mergeData(defaultData(), parsed));
+  }
+};
+
+function mergeData(base, incoming) {
+  return {
+    ...base,
+    ...incoming,
+    settings: {
+      ...base.settings,
+      ...(incoming.settings || {}),
+      changeovers: {
+        ...base.settings.changeovers,
+        ...((incoming.settings && incoming.settings.changeovers) || {})
+      },
+      reactors: incoming.settings?.reactors || base.settings.reactors,
+      sizes: incoming.settings?.sizes || base.settings.sizes
+    },
+    orders: incoming.orders || base.orders,
+    loadedBatchIds: incoming.loadedBatchIds || base.loadedBatchIds
+  };
+}
