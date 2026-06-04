@@ -466,6 +466,52 @@ tr:hover td {
   font-size: 12px;
 }
 
+.guide-panel {
+  max-width: 1120px;
+}
+
+.guide-content {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.guide-content details {
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+.guide-content summary {
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.guide-content p,
+.guide-content li {
+  color: var(--soft-ink);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.guide-content p {
+  margin-top: 12px;
+}
+
+.guide-content ul {
+  margin: 12px 0 0;
+  padding-left: 22px;
+}
+
+.guide-content li + li {
+  margin-top: 8px;
+}
+
+.guide-table {
+  margin-top: 14px;
+}
+
 textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   line-height: 1.45;
