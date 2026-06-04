@@ -20,6 +20,12 @@
         </div>
       </header>
 
+      <nav class="view-tabs">
+        <button class="tab-btn active" data-view="reactorView" type="button">Reactors</button>
+        <button class="tab-btn secondary" data-view="expanderView" type="button">Expanders</button>
+      </nav>
+
+      <section id="reactorView" class="app-view active-view">
       <section class="readout" id="readout"></section>
 
       <section class="workspace-grid">
@@ -78,6 +84,68 @@
         <section class="panel">
           <h2>Settings</h2>
           <form id="settingsForm" class="settings-form"></form>
+        </section>
+      </section>
+      </section>
+
+      <section id="expanderView" class="app-view">
+        <section class="readout" id="expanderReadout"></section>
+
+        <section class="workspace-grid">
+          <form id="expanderOrderForm" class="panel">
+            <h2>Add Expander Order</h2>
+            <div class="form-grid">
+              <label>Customer<input name="customer" required></label>
+              <label>Product Code<input name="productCode"></label>
+              <label>Output Size<select name="size"><option>30X</option><option>35X</option><option>38X</option><option>45X</option><option>52X</option></select></label>
+              <label>Color<select name="color"><option>black</option><option>white</option></select></label>
+              <label>Order Type<select name="orderType"><option value="bag">Bag Order</option><option value="bulk">Bulk / FTL</option></select></label>
+              <label>Quantity<input name="quantity" type="number" min="0.1" step="0.1" required value="52"></label>
+              <label>Grade<input name="grade" value="standard"></label>
+              <label>Preferred Expander<select name="preferredExpander"><option value="">Auto</option><option>E1</option><option>E2</option></select></label>
+              <label>Due Date<input name="dueDate" type="datetime-local" required></label>
+            </div>
+            <div class="actions">
+              <button type="submit">Commit Expander Order</button>
+              <button id="expanderCheckBtn" type="button">Will It Fit?</button>
+            </div>
+            <div id="expanderFitResult" class="result"></div>
+          </form>
+
+          <form id="expanderUpsizeForm" class="panel">
+            <h2>Expander Upsize</h2>
+            <div class="form-grid compact">
+              <label>Existing Order<select name="orderId" id="expanderUpsizeOrder"></select></label>
+              <label>New Quantity<input name="newQuantity" type="number" min="0.1" step="0.1" value="104"></label>
+            </div>
+            <button type="submit">Check Upsize</button>
+            <div id="expanderUpsizeResult" class="result"></div>
+          </form>
+        </section>
+
+        <section class="panel timeline-panel">
+          <div class="section-head">
+            <h2>Expander Schedule</h2>
+            <div class="legend">
+              <span><i class="swatch needed"></i>Needs made</span>
+              <span><i class="swatch white"></i>White bead</span>
+              <span><i class="swatch loaded"></i>Loaded</span>
+              <span><i class="swatch dark"></i>Flip/changeover</span>
+            </div>
+          </div>
+          <div id="expanderTimeline" class="timeline"></div>
+        </section>
+
+        <section class="workspace-grid bottom">
+          <section class="panel">
+            <h2>Expander Backlog</h2>
+            <div id="expanderOrdersTable" class="table-wrap"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Expander Settings</h2>
+            <form id="expanderSettingsForm" class="settings-form"></form>
+          </section>
         </section>
       </section>
     </main>
