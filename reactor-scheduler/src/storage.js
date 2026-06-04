@@ -50,14 +50,17 @@ function mergeData(base, incoming) {
 
 function normalizeSizeRows(rows, truckBags) {
   return rows.map((row) => {
-    const truckFillable = row.truckFillable !== false;
-    const batchesPerTruck = Number(row.batchesPerTruck) || null;
-    const bagsPerBatch = Number(row.bagsPerBatch) || (truckFillable && batchesPerTruck ? Number(truckBags) / batchesPerTruck : null);
+    const truckFillable = (row.truckFillable ?? row.truck_fillable) !== false;
+    const batchesPerTruck = Number(row.batchesPerTruck ?? row.batches_per_truck) || null;
+    const bagsPerBatch = Number(row.bagsPerBatch ?? row.bags_per_batch) || (truckFillable && batchesPerTruck ? Number(truckBags) / batchesPerTruck : null);
     return {
       ...row,
       truckFillable,
+      truck_fillable: truckFillable,
       batchesPerTruck: truckFillable ? batchesPerTruck : null,
+      batches_per_truck: truckFillable ? batchesPerTruck : null,
       bagsPerBatch,
+      bags_per_batch: bagsPerBatch,
       expanded: Boolean(row.expanded ?? row.expanderRoute),
       expanderBaseSize: Number(row.expanderBaseSize || 22)
     };
