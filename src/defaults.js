@@ -19,15 +19,15 @@ export function defaultSettings() {
       { customer: "Cambro", productCode: "", size: 20, family: "", grade: "", color: "", reactor: "R2", note: "Cambro size-20 barred from R2" }
     ],
     sizes: [
-      { id: "13.5-HBS", size: 13.5, family: "HBS", truckFillable: true, batchesPerTruck: 9, bagsPerBatch: 52 / 9, expanded: false, expanderBaseSize: 22 },
-      { id: "15-HBS", size: 15, family: "HBS", truckFillable: true, batchesPerTruck: 8, bagsPerBatch: 52 / 8, expanded: false, expanderBaseSize: 22 },
-      { id: "20-HBS", size: 20, family: "HBS", truckFillable: true, batchesPerTruck: 6, bagsPerBatch: 52 / 6, expanded: false, expanderBaseSize: 22 },
-      { id: "24-HBS", size: 24, family: "HBS", truckFillable: true, batchesPerTruck: 5, bagsPerBatch: 52 / 5, expanded: false, expanderBaseSize: 22 },
-      { id: "5-HBR", size: 5, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
-      { id: "6-HBR", size: 6, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
-      { id: "9-HBR", size: 9, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
-      { id: "11-HBR", size: 11, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
-      { id: "38X-HBS", size: 38, family: "HBS", truckFillable: true, batchesPerTruck: 5, bagsPerBatch: 52 / 5, expanded: true, expanderBaseSize: 22 }
+      { id: "13.5-HBS", size: 13.5, family: "HBS", truckFillable: true, truck_fillable: true, batchesPerTruck: 9, batches_per_truck: 9, bagsPerBatch: 52 / 9, bags_per_batch: 52 / 9, expanded: false, expanderBaseSize: 22 },
+      { id: "15-HBS", size: 15, family: "HBS", truckFillable: true, truck_fillable: true, batchesPerTruck: 8, batches_per_truck: 8, bagsPerBatch: 52 / 8, bags_per_batch: 52 / 8, expanded: false, expanderBaseSize: 22 },
+      { id: "20-HBS", size: 20, family: "HBS", truckFillable: true, truck_fillable: true, batchesPerTruck: 6, batches_per_truck: 6, bagsPerBatch: 52 / 6, bags_per_batch: 52 / 6, expanded: false, expanderBaseSize: 22 },
+      { id: "24-HBS", size: 24, family: "HBS", truckFillable: true, truck_fillable: true, batchesPerTruck: 5, batches_per_truck: 5, bagsPerBatch: 52 / 5, bags_per_batch: 52 / 5, expanded: false, expanderBaseSize: 22 },
+      { id: "5-HBR", size: 5, family: "HBR", truckFillable: false, truck_fillable: false, bagsPerBatch: null, bags_per_batch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "6-HBR", size: 6, family: "HBR", truckFillable: false, truck_fillable: false, bagsPerBatch: null, bags_per_batch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "9-HBR", size: 9, family: "HBR", truckFillable: false, truck_fillable: false, bagsPerBatch: null, bags_per_batch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "11-HBR", size: 11, family: "HBR", truckFillable: false, truck_fillable: false, bagsPerBatch: null, bags_per_batch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "38X-HBS", size: 38, family: "HBS", truckFillable: true, truck_fillable: true, batchesPerTruck: 5, batches_per_truck: 5, bagsPerBatch: 52 / 5, bags_per_batch: 52 / 5, expanded: true, expanderBaseSize: 22 }
     ],
     reactors: [
       {

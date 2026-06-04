@@ -37,16 +37,39 @@ export function defaultExpandedForOrder(order, settings) {
 export function bagsPerBatch(settings, size, family) {
   const row = findYield(settings, size, family);
   if (!row) return null;
-  if (Number(row.bagsPerBatch)) return Number(row.bagsPerBatch);
-  if (row.truckFillable !== false && Number(row.batchesPerTruck)) {
-    return Number(settings.truckBags) / Number(row.batchesPerTruck);
+  if (Number(row.bagsPerBatch ?? row.bags_per_batch)) return Number(row.bagsPerBatch ?? row.bags_per_batch);
+  if (rowIsTruckFillable(row) && Number(row.batchesPerTruck ?? row.batches_per_truck)) {
+    return Number(settings.truckBags) / Number(row.batchesPerTruck ?? row.batches_per_truck);
+  }
+  return null;
+}
+
+function rowIsTruckFillable(row) {
+  return (row.truckFillable ?? row.truck_fillable) !== false;
+}
+
+export function batchesPerTruck(settings, size, family) {
+  const row = findYield(settings, size, family);
+  if (!row || !rowIsTruckFillable(row)) return null;
+  if (Number(row.batchesPerTruck ?? row.batches_per_truck)) return Number(row.batchesPerTruck ?? row.batches_per_truck);
+  if (Number(row.bagsPerBatch ?? row.bags_per_batch)) {
+    return Number(settings.truckBags) / Number(row.bagsPerBatch ?? row.bags_per_batch);
   }
   return null;
 }
 
 export function isTruckFillable(settings, size, family) {
   const row = findYield(settings, size, family);
-  return row ? row.truckFillable !== false : true;
+  return row ? rowIsTruckFillable(row) : true;
+}
+
+export function visibleYieldFields(settings, size, family) {
+  const truckFillable = isTruckFillable(settings, size, family);
+  return {
+    bagsPerBatch: bagsPerBatch(settings, size, family),
+    truckFillable,
+    batchesPerTruck: truckFillable ? batchesPerTruck(settings, size, family) : null
+  };
 }
 
 export function batchesNeeded(order, settings) {

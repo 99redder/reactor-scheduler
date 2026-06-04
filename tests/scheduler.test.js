@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { defaultSettings } from "../src/defaults.js";
 import {
   bagsPerBatch,
+  batchesPerTruck,
   batchesNeeded,
   checkCandidateFit,
   generateStaffedWindows,
   isTruckFillable,
-  scheduleOrders
+  scheduleOrders,
+  visibleYieldFields
 } from "../src/scheduler.js";
 
 const settings = defaultSettings();
@@ -30,6 +32,21 @@ const hbrSettings = structuredClone(settings);
 hbrSettings.sizes.find((row) => row.size === 5 && row.family === "HBR").bagsPerBatch = 10;
 assert.equal(isTruckFillable(hbrSettings, 5, "HBR"), false);
 assert.equal(batchesNeeded({ size: 5, family: "HBR", quantityBags: 30 }, hbrSettings), 3);
+assert.equal(batchesPerTruck(hbrSettings, 5, "HBR"), null);
+assert.deepEqual(visibleYieldFields(hbrSettings, 5, "HBR"), {
+  bagsPerBatch: 10,
+  truckFillable: false,
+  batchesPerTruck: null
+});
+
+const hbrDefault = settings.sizes.find((row) => row.size === 5 && row.family === "HBR");
+assert.equal(hbrDefault.truck_fillable, false);
+assert.equal(Object.hasOwn(hbrDefault, "batchesPerTruck"), false);
+
+const flagDrivenSettings = structuredClone(settings);
+flagDrivenSettings.sizes.push({ id: "14-HBR", size: 14, family: "HBR", truck_fillable: false, bags_per_batch: 7, expanded: false });
+assert.equal(isTruckFillable(flagDrivenSettings, 14, "HBR"), false);
+assert.equal(batchesNeeded({ size: 14, family: "HBR", quantityBags: 30 }, flagDrivenSettings), 5);
 
 const expander = checkCandidateFit([], {
   id: "x",
@@ -68,6 +85,15 @@ const sameColorSchedule = scheduleOrders([
   { id: "b", customer: "B", size: 15, family: "HBS", quantityBags: 6, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "2" }
 ], colorSwitchSettings);
 assert.equal(sameColorSchedule.events.filter((event) => event.type === "changeover").length, 0);
+
+const r1SwitchSettings = structuredClone(settings);
+r1SwitchSettings.reactors.find((reactor) => reactor.id === "R1").colors = ["black", "white"];
+r1SwitchSettings.reactors.find((reactor) => reactor.id === "R2").enabled = false;
+const r1SwitchSchedule = scheduleOrders([
+  { id: "r1-black", customer: "A", size: 15, family: "HBS", quantityBags: 6, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" },
+  { id: "r1-white", customer: "B", size: 15, family: "HBS", quantityBags: 6, color: "white", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "2" }
+], r1SwitchSettings);
+assert.equal(r1SwitchSchedule.events.filter((event) => event.type === "changeover").length, 0);
 
 const allocationSchedule = scheduleOrders([
   { id: "white", customer: "W", size: 15, family: "HBS", quantityBags: 6, color: "white", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" },
