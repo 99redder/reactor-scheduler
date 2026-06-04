@@ -23,6 +23,7 @@
       <nav class="view-tabs">
         <button class="tab-btn active" data-view="reactorView" type="button">Reactors</button>
         <button class="tab-btn secondary" data-view="expanderView" type="button">Expanders</button>
+        <button class="tab-btn secondary" data-view="guideView" type="button">Guide</button>
       </nav>
 
       <section id="reactorView" class="app-view active-view">
@@ -146,6 +147,16 @@
             <h2>Expander Settings</h2>
             <form id="expanderSettingsForm" class="settings-form"></form>
           </section>
+        </section>
+      </section>
+
+      <section id="guideView" class="app-view">
+        <section class="panel guide-panel">
+          <div class="section-head">
+            <h2>User's Guide</h2>
+            <span class="note">Live values are pulled from current Settings.</span>
+          </div>
+          <div id="guideContent" class="guide-content"></div>
         </section>
       </section>
     </main>

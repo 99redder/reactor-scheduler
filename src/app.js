@@ -38,6 +38,7 @@ const els = {
   expanderTimeline: document.querySelector("#expanderTimeline"),
   expanderOrdersTable: document.querySelector("#expanderOrdersTable"),
   expanderSettingsForm: document.querySelector("#expanderSettingsForm"),
+  guideContent: document.querySelector("#guideContent"),
   exportBtn: document.querySelector("#exportBtn"),
   importFile: document.querySelector("#importFile")
 };
@@ -228,6 +229,7 @@ function render() {
   renderExpanderOrders(expanderSchedule);
   renderExpanderSettings();
   renderExpanderUpsizeOptions();
+  renderGuide();
 }
 
 function renderReadout(schedule) {
@@ -453,6 +455,102 @@ function renderExpanderSettings() {
       <textarea name="sizesJson" rows="9">${escapeHtml(JSON.stringify(s.sizes, null, 2))}</textarea>
     </div>
     <button type="submit">Save Expander Settings</button>
+  `;
+}
+
+function renderGuide() {
+  const reactor = state.settings;
+  const expander = state.expanderSettings;
+  const hbrBagOnly = reactor.sizes
+    .filter((row) => row.truckFillable === false || row.truck_fillable === false)
+    .map((row) => `${row.family} ${row.size}`)
+    .join(", ") || "none configured";
+  const expanderBatchRows = expander.sizes
+    .map((row) => `<tr><td>${escapeHtml(row.size)}</td><td>${Math.round(Number(row.batchMinutes) * 10) / 10} min</td><td>${Number(row.batchesPerTruck || row.batches_per_truck || 0) || "-"}</td><td>${round(Number(row.bagsPerBatch || row.bags_per_batch || 0)) || "-"}</td></tr>`)
+    .join("");
+  const reactorExclusions = (reactor.reactorExclusions || [])
+    .map((rule) => `${rule.customer || "any customer"} ${rule.size ? `size ${rule.size}` : "any size"} barred from ${rule.reactor}`)
+    .join("; ") || "none configured";
+  const expanderExclusions = (expander.exclusions || [])
+    .map((rule) => `${rule.size || "any size"} barred from ${rule.expander}`)
+    .join("; ") || "none configured";
+
+  els.guideContent.innerHTML = `
+    <details open>
+      <summary>1. What This App Does</summary>
+      <p>This app has two independent schedulers. The Reactor Scheduler plans R1 and R2, which make finished bead under size 30. The Expander Scheduler plans Expander 1 and Expander 2, which make X sizes from size-22 base. They run separately and do not wait on each other.</p>
+      <p>Use it to answer three questions: does a new order fit, when will it finish, and how full is each machine this week.</p>
+      <p>The schedule is a plan with buffer, not a guarantee. It stays useful only when Settings match the plant and the expander efficiency factor is tuned against real output. Current expander efficiency is <strong>${round(expander.efficiency.globalPercent)}%</strong>.</p>
+    </details>
+
+    <details>
+      <summary>2. Entering An Order</summary>
+      <p>Enter the customer, product code, size, color, quantity, order type, and due date. Use the preferred machine field only when you want to force a fit check or manual assignment.</p>
+      <ul>
+        <li><strong>Customer:</strong> used for labels and routing rules like Cambro size-20.</li>
+        <li><strong>Product code:</strong> use X codes like 38X for expanded product.</li>
+        <li><strong>Size:</strong> reactor sizes are direct bead sizes; expander sizes are X outputs.</li>
+        <li><strong>Color:</strong> white or black. White is capacity-sensitive.</li>
+        <li><strong>Quantity:</strong> one truck is currently <strong>${reactor.truckBags}</strong> bags on the reactor side and <strong>${expander.truckBags}</strong> bags on the expander side.</li>
+        <li><strong>Order type:</strong> bag means loose bag count. Bulk / FTL means full truck with liner, bead blown in.</li>
+        <li><strong>Due date:</strong> the fit checker compares projected completion against this date.</li>
+      </ul>
+      <p>Small HBR sizes are bag-only because they are too dense to fill a ${reactor.truckBags}-bag truck before hitting weight. Current bag-only size rows: <strong>${escapeHtml(hbrBagOnly)}</strong>. The app converts every order into batches using the yield table.</p>
+    </details>
+
+    <details>
+      <summary>3. Reading The Schedule</summary>
+      <p>Each machine has a weekly timeline. Green means needs to be made, yellow means white bead, and blue means loaded or complete.</p>
+      <p>Gaps can be idle time, changeovers, color flips, or unstaffed time. R2 has a dark 2nd shift based on current staffing. Expander color-flip gaps show the time lost switching E2 into and out of white.</p>
+      <p>Use the batch buttons in the backlog to mark loaded batches complete. Completed batches turn blue.</p>
+    </details>
+
+    <details>
+      <summary>4. The "Will It Fit?" Checker</summary>
+      <p>Fill out an order form and click Will It Fit before committing it. The result tells you whether it fits, the projected completion date, and which reactor or expander would run it.</p>
+      <p>Use Upsize Check to test a larger bag or truck count for an existing order. It shows the incremental batches and whether the larger order still fits.</p>
+    </details>
+
+    <details open>
+      <summary>5. Best Practices & Plant-Specific Notes</summary>
+      <ul>
+        <li><strong>Consolidate white runs.</strong> White only runs on Expander 2, and reactor white is handled by R2. Every expander white run costs a flip in and back out: <strong>${expander.colorFlipMinutes * 2}</strong> minutes, about <strong>${round((expander.colorFlipMinutes * 2) / 60)}</strong> hours. Batch all white orders into as few runs as possible.</li>
+        <li><strong>Keep the efficiency factor honest.</strong> Start at 100%, then compare planned vs actual completions. If output runs slower, lower the factor, for example to 85%. Current setting: <strong>${round(expander.efficiency.globalPercent)}%</strong>.</li>
+        <li><strong>Maintain the yield table.</strong> Bags per batch and batch times drive every estimate. Wrong yields mean wrong schedules.</li>
+        <li><strong>Watch the white-capacity warning.</strong> Current warning threshold is <strong>${expander.whiteCapacityThreshold}%</strong> of E2 weekly capacity. When it fires, white is crowding out black output on E2.</li>
+        <li><strong>Know the routing constraints.</strong> Reactor exclusions: ${escapeHtml(reactorExclusions)}. Expander exclusions: ${escapeHtml(expanderExclusions)}.</li>
+        <li><strong>Expander feedstock:</strong> the expander pulls size-22 base from R3 silos. The advisory uses <strong>1 R3 batch per ${round(expander.r3FeedRatio)} expander batches</strong>. It does not track silo inventory.</li>
+        <li><strong>Expanded X orders are not reactor orders.</strong> Anything marked expanded/X is flagged for the expander route and excluded from R1/R2 scheduling.</li>
+      </ul>
+    </details>
+
+    <details>
+      <summary>6. Maintaining Settings</summary>
+      <p>Keep these settings current:</p>
+      <ul>
+        <li><strong>Machine staffing and shifts:</strong> controls when batches can be placed.</li>
+        <li><strong>Days/week and minutes/day:</strong> controls weekly capacity. Current week: reactors ${reactor.daysPerWeek} days, expanders ${expander.daysPerWeek} days.</li>
+        <li><strong>Batch times:</strong> reactor batch time is <strong>${reactor.batchMinutes}</strong> minutes. Expander batch times are size-specific.</li>
+        <li><strong>Yield tables:</strong> reactor bags per batch and expander bags per batch convert orders into batches.</li>
+        <li><strong>Truck bag count:</strong> reactor ${reactor.truckBags}; expander ${expander.truckBags}.</li>
+        <li><strong>Efficiency %:</strong> current expander planning factor is ${round(expander.efficiency.globalPercent)}%.</li>
+        <li><strong>Changeover penalties:</strong> reactor ESD clean ${reactor.changeovers.esdMinutes} min; reactor black/white ${reactor.changeovers.blackWhiteMinutes} min; expander color flip ${expander.colorFlipMinutes} min each way; expander size changeover ${expander.sizeChangeoverMinutes} min.</li>
+        <li><strong>White-capacity threshold:</strong> ${expander.whiteCapacityThreshold}%.</li>
+        <li><strong>Exclusion rules:</strong> routing rules for quality or machine limitations.</li>
+        <li><strong>R3 feed ratio:</strong> ${round(expander.r3FeedRatio)} expander batches per R3 batch.</li>
+      </ul>
+      <p>JSON export is the backup. Export regularly because data is stored in this browser.</p>
+      <table class="guide-table">
+        <thead><tr><th>Expander Size</th><th>Batch Time</th><th>Batches / FTL</th><th>Bags / Batch</th></tr></thead>
+        <tbody>${expanderBatchRows}</tbody>
+      </table>
+    </details>
+
+    <details>
+      <summary>7. Limitations</summary>
+      <p>This is a planning aid, not a control system. It assumes machines run as configured and Settings are accurate.</p>
+      <p>It does not track silo inventory, import orders automatically, or coordinate multiple users. It is designed for one user in one browser with JSON export as backup.</p>
+    </details>
   `;
 }
 
