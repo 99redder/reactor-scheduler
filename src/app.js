@@ -167,11 +167,23 @@ els.settingsForm.addEventListener("submit", (event) => {
   saveAndRender();
 });
 
+els.settingsForm.addEventListener("click", (event) => {
+  handleSettingsButton(event, "reactor");
+});
+
+els.settingsForm.addEventListener("input", () => updateRulePreviews("reactor"));
+
 els.expanderSettingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.expanderSettings = readExpanderSettingsForm();
   saveAndRender();
 });
+
+els.expanderSettingsForm.addEventListener("click", (event) => {
+  handleSettingsButton(event, "expander");
+});
+
+els.expanderSettingsForm.addEventListener("input", () => updateRulePreviews("expander"));
 
 els.orderForm.addEventListener("input", (event) => {
   if (["productCode", "family", "size"].includes(event.target.name)) syncOrderFormHints();
@@ -438,17 +450,23 @@ function renderSettings() {
   const s = state.settings;
   els.settingsForm.innerHTML = `
     <div class="settings-row">
-      <label>Week Start<input name="weekStart" type="date" value="${s.weekStart}"></label>
-      <label>Batch Minutes<input name="batchMinutes" type="number" value="${s.batchMinutes}"></label>
-      <label>Days / Week<input name="daysPerWeek" type="number" value="${s.daysPerWeek}"></label>
-      <label>Shift Length<input name="shiftLength" type="number" value="${s.shiftLength}"></label>
-      <label>Minutes / Day<input name="minutesPerDay" type="number" value="${s.minutesPerDay}"></label>
-      <label>Truck Bags<input name="truckBags" type="number" value="${s.truckBags}"></label>
-      <label>Expander >= Size<input name="expanderThreshold" type="number" value="${s.expanderThreshold}"></label>
-      <label>Combine Same Spec<select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>false</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>true</option></select></label>
-      <label>Auto Color Allocation<select name="autoColorAllocation"><option value="true" ${s.autoColorAllocation ? "selected" : ""}>true</option><option value="false" ${!s.autoColorAllocation ? "selected" : ""}>false</option></select></label>
-      <label>ESD Clean Min<input name="esdMinutes" type="number" value="${s.changeovers.esdMinutes}"></label>
-      <label>Black/White Min<input name="blackWhiteMinutes" type="number" value="${s.changeovers.blackWhiteMinutes}"></label>
+      ${settingField("Week start", "weekStart", "date", s.weekStart, "First day shown on the weekly schedule.")}
+      ${settingField("Batch time (minutes)", "batchMinutes", "number", s.batchMinutes, "How long one reactor batch takes.")}
+      ${settingField("Days per week", "daysPerWeek", "number", s.daysPerWeek, "How many production days are available.")}
+      ${settingField("Shift length (minutes)", "shiftLength", "number", s.shiftLength, "Length of one staffed shift.")}
+      ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
+      ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used only for sizes measured by full truckloads.")}
+      ${settingField("Auto-mark expanded size", "expanderThreshold", "number", s.expanderThreshold, "Fallback only: sizes at or above this are suggested as expanded unless the X setting says otherwise.")}
+      <label>Combine matching orders
+        <select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>No</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>Yes</option></select>
+        <span class="field-help">Future option for sharing batches across matching orders.</span>
+      </label>
+      <label>Prefer white to R2 / black to R1
+        <select name="autoColorAllocation"><option value="true" ${s.autoColorAllocation ? "selected" : ""}>Yes</option><option value="false" ${!s.autoColorAllocation ? "selected" : ""}>No</option></select>
+        <span class="field-help">Guides automatic placement while still respecting manual machine choices.</span>
+      </label>
+      ${settingField("ESD clean time (minutes)", "esdMinutes", "number", s.changeovers.esdMinutes, "Added when the grade changes between batches.")}
+      ${settingField("Black / white switch time (minutes)", "blackWhiteMinutes", "number", s.changeovers.blackWhiteMinutes, "Added only when R2 switches between black and white.")}
     </div>
     <div class="settings-block">
       <h2>Reactors</h2>
@@ -464,14 +482,14 @@ function renderSettings() {
       `).join("")}
     </div>
     <div class="settings-block">
-      <h2>Reactor Exclusions</h2>
-      <div class="note">Blank fields are wildcards. Each rule means the matching customer/product/spec may not run on the listed reactor.</div>
-      <textarea name="exclusionsJson" rows="7">${escapeHtml(JSON.stringify(s.reactorExclusions || [], null, 2))}</textarea>
+      <h2>Reactor Exclusion Rules</h2>
+      <div class="note">Use these when a customer, size, color, or product is not allowed on a reactor. "Any" means the rule applies broadly.</div>
+      ${renderExclusionEditor(s.reactorExclusions || [], s.reactors.filter((reactor) => reactor.id !== "R3"), "reactor")}
     </div>
     <div class="settings-block">
       <h2>Yield Table</h2>
-      <div class="note">Advanced table editor. Store bagsPerBatch for every size. For truckFillable rows, batchesPerTruck can derive/update bagsPerBatch; bag-only HBR rows use bagsPerBatch directly. Expanded rows use expanded: true and expanderBaseSize: 22.</div>
-      <textarea name="sizesJson" rows="9">${escapeHtml(JSON.stringify(s.sizes, null, 2))}</textarea>
+      <div class="note">Standard sizes are measured by batches per truck. Small-batch sizes are measured directly by bags per batch.</div>
+      ${renderYieldTable(s.sizes || [], s.truckBags)}
     </div>
     <button type="submit">Save Settings</button>
   `;
@@ -481,17 +499,17 @@ function renderExpanderSettings() {
   const s = state.expanderSettings;
   els.expanderSettingsForm.innerHTML = `
     <div class="settings-row">
-      <label>Week Start<input name="weekStart" type="date" value="${s.weekStart}"></label>
-      <label>Days / Week<input name="daysPerWeek" type="number" value="${s.daysPerWeek}"></label>
-      <label>Minutes / Day<input name="minutesPerDay" type="number" value="${s.minutesPerDay}"></label>
-      <label>Shift Length<input name="shiftLength" type="number" value="${s.shiftLength}"></label>
-      <label>Truck Bags<input name="truckBags" type="number" value="${s.truckBags}"></label>
-      <label>Efficiency %<input name="efficiency" type="number" value="${s.efficiency.globalPercent}"></label>
-      <label>Color Flip Min<input name="colorFlipMinutes" type="number" value="${s.colorFlipMinutes}"></label>
-      <label>Size Changeover Min<input name="sizeChangeoverMinutes" type="number" value="${s.sizeChangeoverMinutes}"></label>
-      <label>White Threshold %<input name="whiteCapacityThreshold" type="number" value="${s.whiteCapacityThreshold}"></label>
-      <label>R3 Feed Ratio<input name="r3FeedRatio" type="number" step="0.1" value="${s.r3FeedRatio}"></label>
-      <label>Base Input Kg<input name="baseInputKg" type="number" value="${s.baseInputKg}"></label>
+      ${settingField("Week start", "weekStart", "date", s.weekStart, "First day shown on the expander schedule.")}
+      ${settingField("Days per week", "daysPerWeek", "number", s.daysPerWeek, "How many production days are available.")}
+      ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
+      ${settingField("Shift length (minutes)", "shiftLength", "number", s.shiftLength, "Length of one staffed shift.")}
+      ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used to convert bulk / FTL orders into bag-equivalent quantities.")}
+      ${settingField("Efficiency %", "efficiency", "number", s.efficiency.globalPercent, "Lowers or raises planned batch times to match real output.")}
+      ${settingField("Color flip time (minutes)", "colorFlipMinutes", "number", s.colorFlipMinutes, "How long Expander 2 loses when switching between black and white.")}
+      ${settingField("Size changeover time (minutes)", "sizeChangeoverMinutes", "number", s.sizeChangeoverMinutes, "Optional time added when output size changes.")}
+      ${settingField("White warning threshold %", "whiteCapacityThreshold", "number", s.whiteCapacityThreshold, "Warns when white demand consumes this share of Expander 2 capacity.")}
+      ${settingField("R3 feed ratio", "r3FeedRatio", "number", s.r3FeedRatio, "Expander batches supported by one R3 batch.", "0.1")}
+      ${settingField("Base input kg", "baseInputKg", "number", s.baseInputKg, "Size-22 base loaded into one expander batch. Informational only.")}
     </div>
     <div class="settings-block">
       <h2>Expanders</h2>
@@ -505,16 +523,181 @@ function renderExpanderSettings() {
       `).join("")}
     </div>
     <div class="settings-block">
-      <h2>Expander Exclusions</h2>
-      <textarea name="exclusionsJson" rows="6">${escapeHtml(JSON.stringify(s.exclusions || [], null, 2))}</textarea>
+      <h2>Expander Exclusion Rules</h2>
+      <div class="note">Use these when a size, customer, color, or product is not allowed on an expander. "Any" means the rule applies broadly.</div>
+      ${renderExclusionEditor(s.exclusions || [], s.expanders, "expander")}
     </div>
     <div class="settings-block">
       <h2>Expander Size Table</h2>
-      <div class="note">Batch time is per output size. bagsPerBatch derives from truck bags / batchesPerTruck when needed. Base input kg is informational.</div>
-      <textarea name="sizesJson" rows="9">${escapeHtml(JSON.stringify(s.sizes, null, 2))}</textarea>
+      <div class="note">Batch time is per output size. Bags per batch is shown from the current truckload yield.</div>
+      ${renderExpanderSizeTable(s.sizes || [], s.truckBags)}
     </div>
     <button type="submit">Save Expander Settings</button>
   `;
+}
+
+function settingField(label, name, type, value, help, step = "1") {
+  return `<label>${label}<input name="${name}" type="${type}" ${type === "number" ? `step="${step}"` : ""} value="${escapeAttr(value)}"><span class="field-help">${help}</span></label>`;
+}
+
+function renderYieldTable(rows, truckBags) {
+  return `
+    <div class="friendly-table-wrap">
+      <table class="friendly-table">
+        <thead><tr><th>Size</th><th>Type</th><th>Color options</th><th>How it's measured</th><th>Number</th><th>Bags per batch</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map((row, index) => {
+            const truckFillable = (row.truckFillable ?? row.truck_fillable) !== false;
+            const number = truckFillable ? Number(row.batchesPerTruck ?? row.batches_per_truck ?? "") : Number(row.bagsPerBatch ?? row.bags_per_batch ?? "");
+            const derived = truckFillable && number > 0 ? `≈ ${round(Number(truckBags) / number)} bags per batch` : truckFillable ? "Enter batches per truck" : "Used directly";
+            return `<tr>
+              <td><input name="size-${index}-size" type="number" step="0.1" value="${escapeAttr(row.size)}"></td>
+              <td><select name="size-${index}-type"><option value="standard" ${truckFillable ? "selected" : ""}>Standard</option><option value="small" ${!truckFillable ? "selected" : ""}>Small-batch</option></select></td>
+              <td><input name="size-${index}-colors" value="${escapeAttr((row.colors || []).join(", "))}" placeholder="black, white"></td>
+              <td>${truckFillable ? "Batches per truck" : "Bags per batch"}</td>
+              <td><input name="size-${index}-number" type="number" min="0" step="0.01" value="${number || ""}" placeholder="Enter a number greater than 0"></td>
+              <td><span class="helper-pill">${escapeHtml(derived)}</span></td>
+              <td><button class="danger" data-action="remove-size" data-index="${index}" type="button">Remove</button></td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+    <details class="add-form">
+      <summary>Add Size</summary>
+      <div class="settings-row">
+        <label>Size<input name="newSizeSize" type="number" step="0.1"></label>
+        <label>Type<select name="newSizeType"><option value="standard">Standard</option><option value="small">Small-batch</option></select></label>
+        <label>Number<input name="newSizeNumber" type="number" min="0" step="0.01" placeholder="Enter a number greater than 0"></label>
+        <label>Color options<input name="newSizeColors" placeholder="black, white"></label>
+      </div>
+      <button class="secondary" data-action="add-size" type="button">Add Size</button>
+    </details>
+  `;
+}
+
+function renderExpanderSizeTable(rows, truckBags) {
+  return `
+    <div class="friendly-table-wrap">
+      <table class="friendly-table">
+        <thead><tr><th>Size</th><th>Batch time</th><th>Batches per truck</th><th>Bags per batch</th><th>Base input</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map((row, index) => {
+            const batchesPerTruck = Number(row.batchesPerTruck ?? row.batches_per_truck ?? "");
+            const bags = Number(row.bagsPerBatch ?? row.bags_per_batch) || (batchesPerTruck ? Number(truckBags) / batchesPerTruck : 0);
+            return `<tr>
+              <td><input name="exp-size-${index}-size" value="${escapeAttr(row.size)}"></td>
+              <td><input name="exp-size-${index}-batchMinutes" type="number" min="0" step="0.1" value="${escapeAttr(row.batchMinutes)}"></td>
+              <td><input name="exp-size-${index}-batchesPerTruck" type="number" min="0" step="0.01" value="${batchesPerTruck || ""}"></td>
+              <td><span class="helper-pill">≈ ${round(bags)} bags per batch</span></td>
+              <td><input name="exp-size-${index}-baseInputKg" type="number" min="0" step="1" value="${escapeAttr(row.baseInputKg || 550)}"></td>
+              <td><button class="danger" data-action="remove-expander-size" data-index="${index}" type="button">Remove</button></td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+    <details class="add-form">
+      <summary>Add Expander Size</summary>
+      <div class="settings-row">
+        <label>Size<input name="newExpanderSize" placeholder="60X"></label>
+        <label>Batch time<input name="newExpanderBatchMinutes" type="number" min="0" step="0.1"></label>
+        <label>Batches per truck<input name="newExpanderBatchesPerTruck" type="number" min="0" step="0.01"></label>
+        <label>Base input kg<input name="newExpanderBaseInputKg" type="number" min="0" step="1" value="550"></label>
+      </div>
+      <button class="secondary" data-action="add-expander-size" type="button">Add Expander Size</button>
+    </details>
+  `;
+}
+
+function renderExclusionEditor(rows, machines, kind) {
+  return `
+    <div class="rule-list">
+      ${rows.map((row, index) => `
+        <details class="rule-card">
+          <summary>
+            <span>${escapeHtml(exclusionSentence(row, kind))}</span>
+            <span class="rule-actions"><button class="secondary" type="button">Edit</button><button class="danger" data-action="remove-${kind}-exclusion" data-index="${index}" type="button">Remove</button></span>
+          </summary>
+          <div class="settings-row">
+            ${exclusionControls(row, machines, kind, index)}
+          </div>
+        </details>
+      `).join("") || `<p class="empty-note">No rules yet.</p>`}
+    </div>
+    <details class="add-form">
+      <summary>Add Rule</summary>
+      <div class="settings-row">
+        ${exclusionControls({}, machines, kind, "new")}
+      </div>
+      <p class="note">This will block: <span data-preview="${kind}">${escapeHtml(exclusionSentence({ [kind]: machines[0]?.id || "" }, kind))}</span></p>
+      <button class="secondary" data-action="add-${kind}-exclusion" type="button">Add Rule</button>
+    </details>
+  `;
+}
+
+function exclusionControls(row, machines, kind, index) {
+  const prefix = `${kind}-rule-${index}`;
+  const machineValue = row[kind] || machines[0]?.id || "";
+  return `
+    <label>Customer<select name="${prefix}-customer">${option("", "Any", !row.customer)}${knownOptions("customer", row.customer)}</select></label>
+    <label>Size<select name="${prefix}-size">${option("", "Any", !row.size)}${sizeOptions(kind, row.size)}</select></label>
+    <label>Color<select name="${prefix}-color">${option("", "Any", !row.color)}${["black", "white", "green", "yellow"].map((color) => option(color, title(color), row.color === color)).join("")}</select></label>
+    <label>Product code<input name="${prefix}-productCode" value="${escapeAttr(row.productCode || row.product || "")}" placeholder="Any"></label>
+    <label>Grade<input name="${prefix}-grade" value="${escapeAttr(row.grade || "")}" placeholder="Any"></label>
+    <label>Cannot run on<select name="${prefix}-machine">${machines.map((machine) => option(machine.id, machine.name || machine.id, machineValue === machine.id)).join("")}</select></label>
+  `;
+}
+
+function option(value, label, selected = false) {
+  return `<option value="${escapeAttr(value)}" ${selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+}
+
+function knownOptions(field, selectedValue = "") {
+  const values = new Set();
+  [...state.orders, ...state.expanderOrders].forEach((order) => {
+    if (order[field]) values.add(String(order[field]));
+  });
+  [...(state.settings.reactorExclusions || []), ...(state.expanderSettings.exclusions || [])].forEach((rule) => {
+    if (rule[field]) values.add(String(rule[field]));
+  });
+  if (selectedValue) values.add(String(selectedValue));
+  return [...values]
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => option(value, value, String(selectedValue || "") === value))
+    .join("");
+}
+
+function sizeOptions(kind, selectedValue = "") {
+  const rows = kind === "reactor" ? state.settings.sizes : state.expanderSettings.sizes;
+  const values = new Set(rows.map((row) => String(row.size)));
+  if (selectedValue) values.add(String(selectedValue));
+  return [...values]
+    .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b))
+    .map((value) => option(value, value, String(selectedValue || "") === value))
+    .join("");
+}
+
+function exclusionSentence(row, kind) {
+  const pieces = [];
+  if (row.customer) pieces.push(row.customer);
+  if (row.productCode || row.product) pieces.push(row.productCode || row.product);
+  if (row.size) pieces.push(`size-${row.size}`);
+  if (row.color) pieces.push(title(row.color));
+  if (row.grade) pieces.push(`${row.grade} grade`);
+  const subject = pieces.length ? pieces.join(" ") : "Any matching order";
+  return `${subject} cannot run on ${machineLabel(row[kind], kind)}`;
+}
+
+function machineLabel(id, kind) {
+  const machines = kind === "reactor" ? state.settings.reactors : state.expanderSettings.expanders;
+  const found = machines.find((machine) => machine.id === id);
+  return found?.name || id || "the selected machine";
+}
+
+function title(value) {
+  const text = String(value || "");
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 function renderGuide() {
@@ -624,6 +807,24 @@ function readSettingsForm() {
     grades: csv(form.get(`reactor-${index}-grades`)),
     sizes: csv(form.get(`reactor-${index}-sizes`)).map((value) => value === "*" ? value : Number(value))
   }));
+  const sizes = state.settings.sizes.map((row, index) => {
+    const truckFillable = form.get(`size-${index}-type`) === "standard";
+    const number = Number(form.get(`size-${index}-number`));
+    const bagsPerBatch = truckFillable ? (number > 0 ? Number(form.get("truckBags")) / number : null) : (number > 0 ? number : null);
+    return {
+      ...row,
+      size: Number(form.get(`size-${index}-size`)),
+      family: truckFillable ? "HBS" : "HBR",
+      colors: csv(form.get(`size-${index}-colors`)),
+      truckFillable,
+      truck_fillable: truckFillable,
+      batchesPerTruck: truckFillable && number > 0 ? number : null,
+      batches_per_truck: truckFillable && number > 0 ? number : null,
+      bagsPerBatch,
+      bags_per_batch: bagsPerBatch
+    };
+  });
+  const reactorExclusions = state.settings.reactorExclusions.map((_, index) => readRule(form, "reactor", index));
   return {
     ...state.settings,
     weekStart: form.get("weekStart"),
@@ -640,8 +841,8 @@ function readSettingsForm() {
       blackWhiteMinutes: Number(form.get("blackWhiteMinutes"))
     },
     reactors,
-    reactorExclusions: normalizeExclusionRows(JSON.parse(form.get("exclusionsJson") || "[]")),
-    sizes: normalizeSizeRows(JSON.parse(form.get("sizesJson")), Number(form.get("truckBags")))
+    reactorExclusions: normalizeExclusionRows(reactorExclusions),
+    sizes: normalizeSizeRows(sizes, Number(form.get("truckBags")))
   };
 }
 
@@ -655,6 +856,20 @@ function readExpanderSettingsForm() {
     staffedShifts: csv(form.get(`expander-${index}-shifts`)).map(Number),
     colors: csv(form.get(`expander-${index}-colors`)).map((color) => color.toLowerCase())
   }));
+  const sizes = state.expanderSettings.sizes.map((row, index) => {
+    const batchesPerTruck = Number(form.get(`exp-size-${index}-batchesPerTruck`));
+    const bagsPerBatch = batchesPerTruck > 0 ? truckBags / batchesPerTruck : null;
+    return {
+      ...row,
+      size: form.get(`exp-size-${index}-size`),
+      batchMinutes: Number(form.get(`exp-size-${index}-batchMinutes`)),
+      batchesPerTruck: batchesPerTruck > 0 ? batchesPerTruck : null,
+      bagsPerBatch,
+      bags_per_batch: bagsPerBatch,
+      baseInputKg: Number(form.get(`exp-size-${index}-baseInputKg`))
+    };
+  });
+  const exclusions = state.expanderSettings.exclusions.map((_, index) => readRule(form, "expander", index));
   return {
     ...state.expanderSettings,
     weekStart: form.get("weekStart"),
@@ -669,9 +884,126 @@ function readExpanderSettingsForm() {
     r3FeedRatio: Number(form.get("r3FeedRatio")),
     baseInputKg: Number(form.get("baseInputKg")),
     expanders,
-    exclusions: normalizeExpanderExclusionRows(JSON.parse(form.get("exclusionsJson") || "[]")),
-    sizes: normalizeExpanderSizeRows(JSON.parse(form.get("sizesJson") || "[]"), truckBags)
+    exclusions: normalizeExpanderExclusionRows(exclusions),
+    sizes: normalizeExpanderSizeRows(sizes, truckBags)
   };
+}
+
+function handleSettingsButton(event, kind) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const { action, index } = button.dataset;
+  if (kind === "reactor") {
+    if (action === "remove-size") {
+      if (!confirm("Remove this size from the yield table?")) return;
+      state.settings = readSettingsForm();
+      state.settings.sizes.splice(Number(index), 1);
+      saveAndRender();
+    }
+    if (action === "add-size") {
+      const form = new FormData(els.settingsForm);
+      const size = Number(form.get("newSizeSize"));
+      const number = Number(form.get("newSizeNumber"));
+      if (!size || number <= 0) {
+        alert("Enter a size and a number greater than 0.");
+        return;
+      }
+      state.settings = readSettingsForm();
+      const truckFillable = form.get("newSizeType") === "standard";
+      state.settings.sizes.push(newYieldRow(size, truckFillable, number, csv(form.get("newSizeColors")), state.settings.truckBags));
+      saveAndRender();
+    }
+    if (action === "remove-reactor-exclusion") {
+      if (!confirm("Remove this rule?")) return;
+      state.settings = readSettingsForm();
+      state.settings.reactorExclusions.splice(Number(index), 1);
+      saveAndRender();
+    }
+    if (action === "add-reactor-exclusion") {
+      state.settings = readSettingsForm();
+      state.settings.reactorExclusions.push(readRule(new FormData(els.settingsForm), "reactor", "new"));
+      saveAndRender();
+    }
+  }
+  if (kind === "expander") {
+    if (action === "remove-expander-size") {
+      if (!confirm("Remove this expander size?")) return;
+      state.expanderSettings = readExpanderSettingsForm();
+      state.expanderSettings.sizes.splice(Number(index), 1);
+      saveAndRender();
+    }
+    if (action === "add-expander-size") {
+      const form = new FormData(els.expanderSettingsForm);
+      const size = String(form.get("newExpanderSize") || "").trim().toUpperCase();
+      const batchMinutes = Number(form.get("newExpanderBatchMinutes"));
+      const batchesPerTruck = Number(form.get("newExpanderBatchesPerTruck"));
+      if (!size || batchMinutes <= 0 || batchesPerTruck <= 0) {
+        alert("Enter a size, batch time, and batches per truck greater than 0.");
+        return;
+      }
+      state.expanderSettings = readExpanderSettingsForm();
+      state.expanderSettings.sizes.push({
+        id: size,
+        size,
+        batchMinutes,
+        batchesPerTruck,
+        bagsPerBatch: state.expanderSettings.truckBags / batchesPerTruck,
+        baseInputKg: Number(form.get("newExpanderBaseInputKg")) || 550
+      });
+      saveAndRender();
+    }
+    if (action === "remove-expander-exclusion") {
+      if (!confirm("Remove this rule?")) return;
+      state.expanderSettings = readExpanderSettingsForm();
+      state.expanderSettings.exclusions.splice(Number(index), 1);
+      saveAndRender();
+    }
+    if (action === "add-expander-exclusion") {
+      state.expanderSettings = readExpanderSettingsForm();
+      state.expanderSettings.exclusions.push(readRule(new FormData(els.expanderSettingsForm), "expander", "new"));
+      saveAndRender();
+    }
+  }
+}
+
+function newYieldRow(size, truckFillable, number, colors, truckBags) {
+  const bagsPerBatch = truckFillable ? truckBags / number : number;
+  const family = truckFillable ? "HBS" : "HBR";
+  return {
+    id: `${size}-${family}`,
+    size,
+    family,
+    colors,
+    truckFillable,
+    truck_fillable: truckFillable,
+    batchesPerTruck: truckFillable ? number : null,
+    batches_per_truck: truckFillable ? number : null,
+    bagsPerBatch,
+    bags_per_batch: bagsPerBatch,
+    expanded: false,
+    expanderBaseSize: 22
+  };
+}
+
+function readRule(form, kind, index) {
+  const prefix = `${kind}-rule-${index}`;
+  const machine = form.get(`${prefix}-machine`);
+  return {
+    customer: form.get(`${prefix}-customer`) || "",
+    productCode: form.get(`${prefix}-productCode`) || "",
+    size: form.get(`${prefix}-size`) || "",
+    grade: form.get(`${prefix}-grade`) || "",
+    color: form.get(`${prefix}-color`) || "",
+    [kind]: machine || "",
+    note: ""
+  };
+}
+
+function updateRulePreviews(kind) {
+  const formEl = kind === "reactor" ? els.settingsForm : els.expanderSettingsForm;
+  const preview = formEl.querySelector(`[data-preview="${kind}"]`);
+  if (!preview) return;
+  preview.textContent = exclusionSentence(readRule(new FormData(formEl), kind, "new"), kind);
 }
 
 function showFitResult(result, el) {
