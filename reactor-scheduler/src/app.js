@@ -719,6 +719,10 @@ function pct(value) {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
+function round(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
 function fmt(date) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
