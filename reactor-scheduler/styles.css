@@ -503,6 +503,78 @@ tr:hover td {
   align-items: end;
 }
 
+.field-help {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.friendly-table-wrap {
+  overflow-x: auto;
+}
+
+.friendly-table input,
+.friendly-table select {
+  min-width: 120px;
+}
+
+.helper-pill {
+  display: inline-block;
+  color: var(--soft-ink);
+  background: var(--wash);
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.add-form,
+.rule-card {
+  border: 1px solid var(--line);
+  padding: 12px;
+  background: #fff;
+}
+
+.add-form summary,
+.rule-card summary {
+  cursor: pointer;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.rule-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rule-card summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.rule-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rule-card .settings-row,
+.add-form .settings-row {
+  margin-top: 12px;
+}
+
+.empty-note {
+  margin: 0;
+  font-size: 14px;
+}
+
 .note {
   color: var(--muted);
   font-size: 12px;
