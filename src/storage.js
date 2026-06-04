@@ -28,20 +28,37 @@ export const dataStore = {
 };
 
 function mergeData(base, incoming) {
+  const settings = {
+    ...base.settings,
+    ...(incoming.settings || {}),
+    changeovers: {
+      ...base.settings.changeovers,
+      ...((incoming.settings && incoming.settings.changeovers) || {})
+    },
+    reactors: incoming.settings?.reactors || base.settings.reactors,
+    sizes: normalizeSizeRows(incoming.settings?.sizes || base.settings.sizes, incoming.settings?.truckBags || base.settings.truckBags)
+  };
   return {
     ...base,
     ...incoming,
-    settings: {
-      ...base.settings,
-      ...(incoming.settings || {}),
-      changeovers: {
-        ...base.settings.changeovers,
-        ...((incoming.settings && incoming.settings.changeovers) || {})
-      },
-      reactors: incoming.settings?.reactors || base.settings.reactors,
-      sizes: incoming.settings?.sizes || base.settings.sizes
-    },
+    settings,
     orders: incoming.orders || base.orders,
     loadedBatchIds: incoming.loadedBatchIds || base.loadedBatchIds
   };
+}
+
+function normalizeSizeRows(rows, truckBags) {
+  return rows.map((row) => {
+    const truckFillable = row.truckFillable !== false;
+    const batchesPerTruck = Number(row.batchesPerTruck) || null;
+    const bagsPerBatch = Number(row.bagsPerBatch) || (truckFillable && batchesPerTruck ? Number(truckBags) / batchesPerTruck : null);
+    return {
+      ...row,
+      truckFillable,
+      batchesPerTruck: truckFillable ? batchesPerTruck : null,
+      bagsPerBatch,
+      expanded: Boolean(row.expanded ?? row.expanderRoute),
+      expanderBaseSize: Number(row.expanderBaseSize || 22)
+    };
+  });
 }

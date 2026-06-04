@@ -14,13 +14,39 @@ export function findYield(settings, size, family) {
 
 export function isExpanderOrder(order, settings) {
   const row = findYield(settings, order.size, order.family);
-  return Boolean(row?.expanderRoute || Number(order.size) >= Number(settings.expanderThreshold));
+  if (typeof order.expanded === "boolean") return order.expanded;
+  if (hasExpandedSuffix(order.productCode)) return true;
+  if (typeof row?.expanded === "boolean") return row.expanded;
+  if (typeof row?.expanderRoute === "boolean") return row.expanderRoute;
+  return false;
+}
+
+export function hasExpandedSuffix(productCode = "") {
+  return /(?:^|[^a-z0-9])\d+(?:\.\d+)?x$/i.test(String(productCode).trim())
+    || /\d+(?:\.\d+)?x$/i.test(String(productCode).trim());
+}
+
+export function defaultExpandedForOrder(order, settings) {
+  if (typeof order.expanded === "boolean") return order.expanded;
+  if (hasExpandedSuffix(order.productCode)) return true;
+  const row = findYield(settings, order.size, order.family);
+  if (typeof row?.expanded === "boolean") return row.expanded;
+  return Number(order.size) >= Number(settings.expanderThreshold);
 }
 
 export function bagsPerBatch(settings, size, family) {
   const row = findYield(settings, size, family);
-  if (!row || !Number(row.batchesPerTruck)) return null;
-  return Number(settings.truckBags) / Number(row.batchesPerTruck);
+  if (!row) return null;
+  if (Number(row.bagsPerBatch)) return Number(row.bagsPerBatch);
+  if (row.truckFillable !== false && Number(row.batchesPerTruck)) {
+    return Number(settings.truckBags) / Number(row.batchesPerTruck);
+  }
+  return null;
+}
+
+export function isTruckFillable(settings, size, family) {
+  const row = findYield(settings, size, family);
+  return row ? row.truckFillable !== false : true;
 }
 
 export function batchesNeeded(order, settings) {
@@ -97,6 +123,7 @@ export function buildBatches(orders, settings) {
       sequence: index + 1,
       customer: order.customer,
       productCode: order.productCode,
+      preferredReactor: order.preferredReactor || "",
       size: Number(order.size),
       family: order.family,
       grade: order.grade || "standard",
@@ -116,13 +143,15 @@ export function scheduleOrders(orders, settings, loadedBatchIds = []) {
     priorBatch: null
   }]));
   const unscheduled = [];
-  const batches = buildBatches(orders, settings);
+  const batches = orderBatchesForScheduling(buildBatches(orders, settings), settings);
   for (const batch of batches) {
     const candidates = reactors
       .filter((reactor) => reactorCanRun(reactor, batch))
       .map((reactor) => placeBatchCandidate(batch, reactorStates[reactor.id], settings))
       .filter(Boolean)
-      .sort((a, b) => a.batchEvent.end - b.batchEvent.end || a.batchEvent.start - b.batchEvent.start);
+      .sort((a, b) => candidateScore(a, batch, settings) - candidateScore(b, batch, settings)
+        || a.batchEvent.end - b.batchEvent.end
+        || a.batchEvent.start - b.batchEvent.start);
     if (!candidates.length) {
       unscheduled.push(batch);
       continue;
@@ -136,7 +165,7 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
   if (isExpanderOrder(candidateOrder, settings)) {
     return {
       status: "expander",
-      message: "requires expander - out of scope",
+      message: "Expanded (X) product - requires size-22 base on R3 + expander pass. Out of v1 scope.",
       batches: 0,
       fits: false
     };
@@ -155,6 +184,34 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
     reactors: [...new Set(candidateEvents.map((event) => event.reactorId))],
     schedule
   };
+}
+
+function orderBatchesForScheduling(batches, settings) {
+  if (!settings.autoColorAllocation) return batches;
+  return [...batches].sort((a, b) => {
+    const dueCompare = dueValue(a) - dueValue(b);
+    if (dueCompare !== 0) return dueCompare;
+    return colorPriority(a.color) - colorPriority(b.color)
+      || String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+  });
+}
+
+function colorPriority(color) {
+  const normalized = normalizeColor(color);
+  if (normalized === "white") return 0;
+  if (normalized === "black") return 1;
+  return 2;
+}
+
+function candidateScore(candidate, batch, settings) {
+  if (batch.preferredReactor && candidate.reactorId === batch.preferredReactor) return -100000;
+  if (batch.preferredReactor && candidate.reactorId !== batch.preferredReactor) return 100000;
+  if (!settings.autoColorAllocation) return 0;
+  const color = normalizeColor(batch.color);
+  if (color === "white" && candidate.reactorId === "R2") return -1000;
+  if (color === "black" && candidate.reactorId === "R1") return -1000;
+  if (color === "black" && candidate.reactorId === "R2") return 1000;
+  return 0;
 }
 
 export function upsizeCheck(orders, orderId, newBagCount, settings, loadedBatchIds = []) {

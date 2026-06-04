@@ -2,7 +2,9 @@ import { dataStore } from "./storage.js";
 import {
   batchesNeeded,
   checkCandidateFit,
+  defaultExpandedForOrder,
   isExpanderOrder,
+  isTruckFillable,
   minutesToDate,
   scheduleOrders,
   upsizeCheck
@@ -25,6 +27,7 @@ const els = {
 };
 
 setDefaultDueDate();
+syncOrderFormHints();
 render();
 
 els.orderForm.addEventListener("submit", (event) => {
@@ -34,6 +37,7 @@ els.orderForm.addEventListener("submit", (event) => {
   saveAndRender();
   els.orderForm.reset();
   setDefaultDueDate();
+  syncOrderFormHints();
 });
 
 document.querySelector("#checkBtn").addEventListener("click", () => {
@@ -79,6 +83,10 @@ els.settingsForm.addEventListener("submit", (event) => {
   saveAndRender();
 });
 
+els.orderForm.addEventListener("input", (event) => {
+  if (["productCode", "family", "size"].includes(event.target.name)) syncOrderFormHints();
+});
+
 els.ordersTable.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
@@ -97,16 +105,21 @@ els.ordersTable.addEventListener("click", (event) => {
 
 function readOrderForm() {
   const form = new FormData(els.orderForm);
-  const trucks = Number(form.get("trucks") || 0);
+  const size = Number(form.get("size"));
+  const family = form.get("family");
+  const truckFillable = isTruckFillable(state.settings, size, family);
+  const trucks = truckFillable ? Number(form.get("trucks") || 0) : 0;
   const bags = trucks > 0 ? trucks * Number(state.settings.truckBags) : Number(form.get("quantityBags"));
   return {
     customer: form.get("customer") || "Candidate",
     productCode: form.get("productCode") || "",
-    family: form.get("family"),
-    size: Number(form.get("size")),
+    family,
+    size,
     quantityBags: bags,
     grade: form.get("grade"),
     color: form.get("color"),
+    preferredReactor: form.get("preferredReactor"),
+    expanded: form.get("expanded") === "on",
     dueDate: form.get("dueDate")
   };
 }
@@ -168,10 +181,10 @@ function renderOrders(schedule) {
         ${state.orders.map((order) => {
           const events = byOrder.get(order.id) || [];
           const expander = isExpanderOrder(order, state.settings);
-          const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)))) : expander ? "expander" : "not scheduled";
+          const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)))) : expander ? "expanded route" : "not scheduled";
           return `<tr>
             <td>${escapeHtml(order.customer)}<br><span class="note">${escapeHtml(order.productCode || "")}</span></td>
-            <td>${order.family} ${order.size} ${order.grade} ${order.color}</td>
+            <td>${order.family} ${order.size}${order.expanded ? "X" : ""} ${order.grade} ${order.color}${order.preferredReactor ? ` -> ${order.preferredReactor}` : ""}</td>
             <td>${order.quantityBags}</td>
             <td>${batchesNeeded(order, state.settings)}</td>
             <td>${completion}</td>
@@ -200,6 +213,7 @@ function renderSettings() {
       <label>Truck Bags<input name="truckBags" type="number" value="${s.truckBags}"></label>
       <label>Expander >= Size<input name="expanderThreshold" type="number" value="${s.expanderThreshold}"></label>
       <label>Combine Same Spec<select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>false</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>true</option></select></label>
+      <label>Auto Color Allocation<select name="autoColorAllocation"><option value="true" ${s.autoColorAllocation ? "selected" : ""}>true</option><option value="false" ${!s.autoColorAllocation ? "selected" : ""}>false</option></select></label>
       <label>ESD Clean Min<input name="esdMinutes" type="number" value="${s.changeovers.esdMinutes}"></label>
       <label>Black/White Min<input name="blackWhiteMinutes" type="number" value="${s.changeovers.blackWhiteMinutes}"></label>
     </div>
@@ -218,7 +232,7 @@ function renderSettings() {
     </div>
     <div class="settings-block">
       <h2>Yield Table</h2>
-      <div class="note">Edit JSON directly for add/remove. Batches per truck derives bags per batch as truck bags / batches per truck.</div>
+      <div class="note">Edit JSON directly for add/remove. Store bagsPerBatch for every size. For truckFillable rows, batchesPerTruck can derive/update bagsPerBatch; bag-only HBR rows use bagsPerBatch directly. Expanded rows use expanded: true and expanderBaseSize: 22.</div>
       <textarea name="sizesJson" rows="9">${escapeHtml(JSON.stringify(s.sizes, null, 2))}</textarea>
     </div>
     <button type="submit">Save Settings</button>
@@ -246,12 +260,13 @@ function readSettingsForm() {
     truckBags: Number(form.get("truckBags")),
     expanderThreshold: Number(form.get("expanderThreshold")),
     combineSameSpec: form.get("combineSameSpec") === "true",
+    autoColorAllocation: form.get("autoColorAllocation") === "true",
     changeovers: {
       esdMinutes: Number(form.get("esdMinutes")),
       blackWhiteMinutes: Number(form.get("blackWhiteMinutes"))
     },
     reactors,
-    sizes: JSON.parse(form.get("sizesJson"))
+    sizes: normalizeSizeRows(JSON.parse(form.get("sizesJson")), Number(form.get("truckBags")))
   };
 }
 
@@ -318,4 +333,38 @@ function setDefaultDueDate() {
   due.setDate(due.getDate() + 2);
   due.setHours(16, 0, 0, 0);
   input.value = due.toISOString().slice(0, 16);
+}
+
+function syncOrderFormHints() {
+  const form = new FormData(els.orderForm);
+  const order = {
+    productCode: form.get("productCode") || "",
+    family: form.get("family"),
+    size: Number(form.get("size")),
+    expanded: undefined
+  };
+  const expandedInput = els.orderForm.querySelector('[name="expanded"]');
+  const truckInput = els.orderForm.querySelector('[name="trucks"]');
+  const trucksField = document.querySelector("#trucksField");
+  expandedInput.checked = defaultExpandedForOrder(order, state.settings);
+  const truckFillable = isTruckFillable(state.settings, order.size, order.family);
+  trucksField.classList.toggle("hidden", !truckFillable);
+  truckInput.disabled = !truckFillable;
+  if (!truckFillable) truckInput.value = "";
+}
+
+function normalizeSizeRows(rows, truckBags) {
+  return rows.map((row) => {
+    const truckFillable = row.truckFillable !== false;
+    const batchesPerTruck = Number(row.batchesPerTruck) || null;
+    const bagsPerBatch = Number(row.bagsPerBatch) || (truckFillable && batchesPerTruck ? truckBags / batchesPerTruck : null);
+    return {
+      ...row,
+      truckFillable,
+      batchesPerTruck: truckFillable ? batchesPerTruck : null,
+      bagsPerBatch,
+      expanded: Boolean(row.expanded),
+      expanderBaseSize: Number(row.expanderBaseSize || 22)
+    };
+  });
 }

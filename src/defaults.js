@@ -10,18 +10,21 @@ export function defaultSettings() {
     truckBags: 52,
     expanderThreshold: 30,
     combineSameSpec: false,
+    autoColorAllocation: true,
     changeovers: {
       esdMinutes: 45,
       blackWhiteMinutes: 540
     },
     sizes: [
-      { id: "13.5-HBS", size: 13.5, family: "HBS", batchesPerTruck: 9, expanderRoute: false },
-      { id: "15-HBS", size: 15, family: "HBS", batchesPerTruck: 8, expanderRoute: false },
-      { id: "20-HBS", size: 20, family: "HBS", batchesPerTruck: 6, expanderRoute: false },
-      { id: "24-HBS", size: 24, family: "HBS", batchesPerTruck: 5, expanderRoute: false },
-      { id: "5-HBR", size: 5, family: "HBR", batchesPerTruck: null, expanderRoute: false },
-      { id: "6-HBR", size: 6, family: "HBR", batchesPerTruck: null, expanderRoute: false },
-      { id: "38-HBS", size: 38, family: "HBS", batchesPerTruck: null, expanderRoute: true }
+      { id: "13.5-HBS", size: 13.5, family: "HBS", truckFillable: true, batchesPerTruck: 9, bagsPerBatch: 52 / 9, expanded: false, expanderBaseSize: 22 },
+      { id: "15-HBS", size: 15, family: "HBS", truckFillable: true, batchesPerTruck: 8, bagsPerBatch: 52 / 8, expanded: false, expanderBaseSize: 22 },
+      { id: "20-HBS", size: 20, family: "HBS", truckFillable: true, batchesPerTruck: 6, bagsPerBatch: 52 / 6, expanded: false, expanderBaseSize: 22 },
+      { id: "24-HBS", size: 24, family: "HBS", truckFillable: true, batchesPerTruck: 5, bagsPerBatch: 52 / 5, expanded: false, expanderBaseSize: 22 },
+      { id: "5-HBR", size: 5, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "6-HBR", size: 6, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "9-HBR", size: 9, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "11-HBR", size: 11, family: "HBR", truckFillable: false, batchesPerTruck: null, bagsPerBatch: null, expanded: false, expanderBaseSize: 22 },
+      { id: "38X-HBS", size: 38, family: "HBS", truckFillable: true, batchesPerTruck: 5, bagsPerBatch: 52 / 5, expanded: true, expanderBaseSize: 22 }
     ],
     reactors: [
       {
@@ -33,7 +36,7 @@ export function defaultSettings() {
         mergeAdjacentWindows: true,
         sizes: ["*"],
         grades: ["standard", "ESD"],
-        colors: ["white"]
+        colors: ["black"]
       },
       {
         id: "R2",
@@ -44,7 +47,7 @@ export function defaultSettings() {
         mergeAdjacentWindows: true,
         sizes: ["*"],
         grades: ["standard", "ESD"],
-        colors: ["white", "black", "green", "yellow"]
+        colors: ["white", "black"]
       },
       {
         id: "R3",

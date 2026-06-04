@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { defaultSettings } from "../src/defaults.js";
 import {
+  bagsPerBatch,
   batchesNeeded,
   checkCandidateFit,
   generateStaffedWindows,
+  isTruckFillable,
   scheduleOrders
 } from "../src/scheduler.js";
 
@@ -22,15 +24,36 @@ assert.equal(r2Capacity, 29, "R2 should lose capacity to dark shift and stranded
 assert.equal(batchesNeeded({ size: 15, family: "HBS", quantityBags: 52 }, settings), 8);
 assert.equal(batchesNeeded({ size: 24, family: "HBS", quantityBags: 52 }, settings), 5);
 assert.equal(batchesNeeded({ size: 13.5, family: "HBS", quantityBags: 52 }, settings), 9);
+assert.equal(bagsPerBatch(settings, 15, "HBS"), 6.5);
+
+const hbrSettings = structuredClone(settings);
+hbrSettings.sizes.find((row) => row.size === 5 && row.family === "HBR").bagsPerBatch = 10;
+assert.equal(isTruckFillable(hbrSettings, 5, "HBR"), false);
+assert.equal(batchesNeeded({ size: 5, family: "HBR", quantityBags: 30 }, hbrSettings), 3);
 
 const expander = checkCandidateFit([], {
   id: "x",
   size: 38,
   family: "HBS",
+  productCode: "38X",
   quantityBags: 52,
   dueDate: "2026-06-06T12:00"
 }, settings);
 assert.equal(expander.status, "expander");
+assert.match(expander.message, /size-22 base on R3 \+ expander pass/);
+
+const direct38 = checkCandidateFit([], {
+  id: "direct38",
+  size: 38,
+  family: "HBS",
+  productCode: "38X",
+  expanded: false,
+  quantityBags: 52,
+  color: "black",
+  grade: "standard",
+  dueDate: "2026-06-08T12:00"
+}, settings);
+assert.equal(direct38.status, "scheduled");
 
 const colorSwitchSettings = structuredClone(settings);
 colorSwitchSettings.reactors.find((reactor) => reactor.id === "R1").enabled = false;
@@ -45,6 +68,19 @@ const sameColorSchedule = scheduleOrders([
   { id: "b", customer: "B", size: 15, family: "HBS", quantityBags: 6, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "2" }
 ], colorSwitchSettings);
 assert.equal(sameColorSchedule.events.filter((event) => event.type === "changeover").length, 0);
+
+const allocationSchedule = scheduleOrders([
+  { id: "white", customer: "W", size: 15, family: "HBS", quantityBags: 6, color: "white", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" },
+  { id: "black", customer: "B", size: 15, family: "HBS", quantityBags: 6, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "2" }
+], settings);
+assert.equal(allocationSchedule.events.find((event) => event.orderId === "white")?.reactorId, "R2");
+assert.equal(allocationSchedule.events.find((event) => event.orderId === "black")?.reactorId, "R1");
+
+const manualR2Schedule = scheduleOrders([
+  { id: "white", customer: "W", size: 15, family: "HBS", quantityBags: 6, color: "white", grade: "standard", preferredReactor: "R2", dueDate: "2026-06-08T12:00", createdAt: "1" },
+  { id: "black", customer: "B", size: 15, family: "HBS", quantityBags: 6, color: "black", grade: "standard", preferredReactor: "R2", dueDate: "2026-06-08T12:00", createdAt: "2" }
+], settings);
+assert.equal(manualR2Schedule.events.find((event) => event.type === "changeover")?.minutes, 540);
 
 const fit = checkCandidateFit([], {
   id: "fit",

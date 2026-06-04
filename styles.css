@@ -108,6 +108,25 @@ label {
   letter-spacing: .04em;
 }
 
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding-top: 23px;
+}
+
+.check-label input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  accent-color: var(--orange);
+}
+
+.hidden {
+  display: none !important;
+}
+
 .app-shell {
   width: min(1660px, calc(100vw - 48px));
   margin: 0 auto;
