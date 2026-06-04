@@ -81,14 +81,66 @@ export function generateStaffedWindows(reactor, settings) {
   }, []);
 }
 
-export function reactorCanRun(reactor, order) {
+export function reactorCanRun(reactor, order, settings) {
   if (!reactor.enabled) return false;
+  if (order.preferredReactor && reactor.id !== order.preferredReactor) return false;
+  if (isReactorExcluded(reactor.id, order, settings)) return false;
   const size = Number(order.size);
   const color = normalizeColor(order.color);
   const grade = order.grade || "standard";
   return listAllows(reactor.sizes, size)
     && listAllows(reactor.colors, color)
     && listAllows(reactor.grades, grade);
+}
+
+export function isReactorExcluded(reactorId, order, settings) {
+  return matchingExclusions(order, settings).some((rule) => String(rule.reactor || "").trim() === reactorId);
+}
+
+export function matchingExclusions(order, settings) {
+  return (settings.reactorExclusions || []).filter((rule) => exclusionMatches(rule, order));
+}
+
+export function exclusionMessage(order, settings) {
+  const matches = matchingExclusions(order, settings);
+  if (!matches.length) return "";
+  const barred = matches.map((rule) => rule.reactor).filter(Boolean).join(", ");
+  const fallback = eligibleReactorNames(order, settings, { ignoreExclusions: true, ignorePreferred: true })
+    .filter((id) => !matches.some((rule) => rule.reactor === id))
+    .join(", ");
+  const spec = [order.customer, `size-${order.size}`].filter(Boolean).join(" ");
+  return `${spec || "This order"} is barred from ${barred}${fallback ? `; must schedule on ${fallback}` : ""}.`;
+}
+
+function eligibleReactorNames(order, settings, options = {}) {
+  return settings.reactors
+    .filter((reactor) => reactor.enabled && reactor.id !== "R3")
+    .filter((reactor) => {
+      if (!options.ignorePreferred && order.preferredReactor && reactor.id !== order.preferredReactor) return false;
+      if (!options.ignoreExclusions && isReactorExcluded(reactor.id, order, settings)) return false;
+      const size = Number(order.size);
+      const color = normalizeColor(order.color);
+      const grade = order.grade || "standard";
+      return listAllows(reactor.sizes, size)
+        && listAllows(reactor.colors, color)
+        && listAllows(reactor.grades, grade);
+    })
+    .map((reactor) => reactor.id);
+}
+
+function exclusionMatches(rule, order) {
+  return fieldMatches(rule.customer, order.customer)
+    && fieldMatches(rule.productCode ?? rule.product, order.productCode)
+    && fieldMatches(rule.size, order.size, true)
+    && fieldMatches(rule.family, order.family)
+    && fieldMatches(rule.grade, order.grade || "standard")
+    && fieldMatches(rule.color, normalizeColor(order.color));
+}
+
+function fieldMatches(ruleValue, orderValue, numeric = false) {
+  if (ruleValue === undefined || ruleValue === null || String(ruleValue).trim() === "") return true;
+  if (numeric) return Number(ruleValue) === Number(orderValue);
+  return String(ruleValue).trim().toLowerCase() === String(orderValue || "").trim().toLowerCase();
 }
 
 function listAllows(list = [], value) {
@@ -146,7 +198,7 @@ export function scheduleOrders(orders, settings, loadedBatchIds = []) {
   const batches = orderBatchesForScheduling(buildBatches(orders, settings), settings);
   for (const batch of batches) {
     const candidates = reactors
-      .filter((reactor) => reactorCanRun(reactor, batch))
+      .filter((reactor) => reactorCanRun(reactor, batch, settings))
       .map((reactor) => placeBatchCandidate(batch, reactorStates[reactor.id], settings))
       .filter(Boolean)
       .sort((a, b) => candidateScore(a, batch, settings) - candidateScore(b, batch, settings)
@@ -177,6 +229,7 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
   const due = candidate.dueDate ? dateToScheduleMinute(settings.weekStart, candidate.dueDate) : Number.MAX_SAFE_INTEGER;
   return {
     status: candidateEvents.length ? "scheduled" : "blocked",
+    message: candidateEvents.length ? "" : exclusionMessage(candidate, settings),
     batches: batchesNeeded(candidate, settings),
     minutes: batchesNeeded(candidate, settings) * Number(settings.batchMinutes),
     fits: completion !== null && completion <= due,

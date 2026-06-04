@@ -36,6 +36,7 @@ function mergeData(base, incoming) {
       ...((incoming.settings && incoming.settings.changeovers) || {})
     },
     reactors: incoming.settings?.reactors || base.settings.reactors,
+    reactorExclusions: incoming.settings?.reactorExclusions || base.settings.reactorExclusions,
     sizes: normalizeSizeRows(incoming.settings?.sizes || base.settings.sizes, incoming.settings?.truckBags || base.settings.truckBags)
   };
   return {

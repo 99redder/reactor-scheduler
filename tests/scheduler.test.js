@@ -76,6 +76,41 @@ const allocationSchedule = scheduleOrders([
 assert.equal(allocationSchedule.events.find((event) => event.orderId === "white")?.reactorId, "R2");
 assert.equal(allocationSchedule.events.find((event) => event.orderId === "black")?.reactorId, "R1");
 
+const cambroSchedule = scheduleOrders([
+  { id: "cambro", customer: "Cambro", size: 20, family: "HBS", quantityBags: 9, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" }
+], settings);
+assert.equal(cambroSchedule.events.find((event) => event.orderId === "cambro")?.reactorId, "R1");
+
+const cambroR2Fit = checkCandidateFit([], {
+  id: "cambro-r2",
+  customer: "Cambro",
+  size: 20,
+  family: "HBS",
+  quantityBags: 9,
+  color: "black",
+  grade: "standard",
+  preferredReactor: "R2",
+  dueDate: "2026-06-08T12:00"
+}, settings);
+assert.equal(cambroR2Fit.status, "blocked");
+assert.match(cambroR2Fit.message, /Cambro size-20 is barred from R2; must schedule on R1/);
+
+const noExclusionSettings = structuredClone(settings);
+noExclusionSettings.reactorExclusions = [];
+const cambroR2Allowed = checkCandidateFit([], {
+  id: "cambro-r2-ok",
+  customer: "Cambro",
+  size: 20,
+  family: "HBS",
+  quantityBags: 9,
+  color: "black",
+  grade: "standard",
+  preferredReactor: "R2",
+  dueDate: "2026-06-08T12:00"
+}, noExclusionSettings);
+assert.equal(cambroR2Allowed.status, "scheduled");
+assert.deepEqual(cambroR2Allowed.reactors, ["R2"]);
+
 const manualR2Schedule = scheduleOrders([
   { id: "white", customer: "W", size: 15, family: "HBS", quantityBags: 6, color: "white", grade: "standard", preferredReactor: "R2", dueDate: "2026-06-08T12:00", createdAt: "1" },
   { id: "black", customer: "B", size: 15, family: "HBS", quantityBags: 6, color: "black", grade: "standard", preferredReactor: "R2", dueDate: "2026-06-08T12:00", createdAt: "2" }

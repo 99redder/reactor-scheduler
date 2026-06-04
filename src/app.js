@@ -231,6 +231,11 @@ function renderSettings() {
       `).join("")}
     </div>
     <div class="settings-block">
+      <h2>Reactor Exclusions</h2>
+      <div class="note">Blank fields are wildcards. Each rule means the matching customer/product/spec may not run on the listed reactor.</div>
+      <textarea name="exclusionsJson" rows="7">${escapeHtml(JSON.stringify(s.reactorExclusions || [], null, 2))}</textarea>
+    </div>
+    <div class="settings-block">
       <h2>Yield Table</h2>
       <div class="note">Edit JSON directly for add/remove. Store bagsPerBatch for every size. For truckFillable rows, batchesPerTruck can derive/update bagsPerBatch; bag-only HBR rows use bagsPerBatch directly. Expanded rows use expanded: true and expanderBaseSize: 22.</div>
       <textarea name="sizesJson" rows="9">${escapeHtml(JSON.stringify(s.sizes, null, 2))}</textarea>
@@ -266,6 +271,7 @@ function readSettingsForm() {
       blackWhiteMinutes: Number(form.get("blackWhiteMinutes"))
     },
     reactors,
+    reactorExclusions: normalizeExclusionRows(JSON.parse(form.get("exclusionsJson") || "[]")),
     sizes: normalizeSizeRows(JSON.parse(form.get("sizesJson")), Number(form.get("truckBags")))
   };
 }
@@ -281,6 +287,7 @@ function showFitResult(result, el) {
 }
 
 function fitText(result) {
+  if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
   const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(state.settings.weekStart, result.completion));
   const reactors = result.reactors?.length ? result.reactors.join(", ") : "none";
   return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, reactor(s) ${reactors}.`;
@@ -367,4 +374,17 @@ function normalizeSizeRows(rows, truckBags) {
       expanderBaseSize: Number(row.expanderBaseSize || 22)
     };
   });
+}
+
+function normalizeExclusionRows(rows) {
+  return rows.map((row) => ({
+    customer: row.customer || "",
+    productCode: row.productCode || row.product || "",
+    size: row.size === "" || row.size === undefined || row.size === null ? "" : Number(row.size),
+    family: row.family || "",
+    grade: row.grade || "",
+    color: row.color || "",
+    reactor: row.reactor || "",
+    note: row.note || ""
+  })).filter((row) => row.reactor);
 }
