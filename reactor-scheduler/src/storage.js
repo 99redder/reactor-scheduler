@@ -39,12 +39,26 @@ function mergeData(base, incoming) {
     reactorExclusions: incoming.settings?.reactorExclusions || base.settings.reactorExclusions,
     sizes: normalizeSizeRows(incoming.settings?.sizes || base.settings.sizes, incoming.settings?.truckBags || base.settings.truckBags)
   };
+  const expanderSettings = {
+    ...base.expanderSettings,
+    ...(incoming.expanderSettings || {}),
+    efficiency: {
+      ...base.expanderSettings.efficiency,
+      ...((incoming.expanderSettings && incoming.expanderSettings.efficiency) || {})
+    },
+    expanders: incoming.expanderSettings?.expanders || base.expanderSettings.expanders,
+    sizes: normalizeExpanderSizeRows(incoming.expanderSettings?.sizes || base.expanderSettings.sizes, incoming.expanderSettings?.truckBags || base.expanderSettings.truckBags),
+    exclusions: incoming.expanderSettings?.exclusions || base.expanderSettings.exclusions
+  };
   return {
     ...base,
     ...incoming,
     settings,
+    expanderSettings,
     orders: incoming.orders || base.orders,
-    loadedBatchIds: incoming.loadedBatchIds || base.loadedBatchIds
+    loadedBatchIds: incoming.loadedBatchIds || base.loadedBatchIds,
+    expanderOrders: incoming.expanderOrders || base.expanderOrders,
+    loadedExpanderBatchIds: incoming.loadedExpanderBatchIds || base.loadedExpanderBatchIds
   };
 }
 
@@ -63,6 +77,23 @@ function normalizeSizeRows(rows, truckBags) {
       bags_per_batch: bagsPerBatch,
       expanded: Boolean(row.expanded ?? row.expanderRoute),
       expanderBaseSize: Number(row.expanderBaseSize || 22)
+    };
+  });
+}
+
+function normalizeExpanderSizeRows(rows, truckBags) {
+  return rows.map((row) => {
+    const batchesPerTruck = Number(row.batchesPerTruck ?? row.batches_per_truck) || null;
+    const bagsPerBatch = Number(row.bagsPerBatch ?? row.bags_per_batch) || (batchesPerTruck ? Number(truckBags) / batchesPerTruck : null);
+    return {
+      ...row,
+      size: String(row.size).toUpperCase(),
+      batchMinutes: Number(row.batchMinutes ?? row.batch_minutes ?? 0),
+      batchesPerTruck,
+      batches_per_truck: batchesPerTruck,
+      bagsPerBatch,
+      bags_per_batch: bagsPerBatch,
+      baseInputKg: Number(row.baseInputKg ?? row.base_input_kg ?? 550)
     };
   });
 }

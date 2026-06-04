@@ -193,6 +193,26 @@ p {
 
 .file-btn input { display: none; }
 
+.view-tabs {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 22px;
+}
+
+.tab-btn.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.app-view {
+  display: none;
+}
+
+.app-view.active-view {
+  display: block;
+}
+
 .readout {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -360,6 +380,14 @@ p {
 .event.loaded { background: var(--blue); color: #fff; }
 .event.changeover {
   background: var(--change);
+  color: #fff;
+  top: 21px;
+  height: 24px;
+  padding: 3px 7px;
+}
+
+.event.color-flip {
+  background: #222;
   color: #fff;
   top: 21px;
   height: 24px;

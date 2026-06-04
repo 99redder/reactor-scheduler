@@ -81,7 +81,57 @@ export function defaultData() {
     settings: defaultSettings(),
     orders: [],
     loadedBatchIds: [],
+    expanderSettings: defaultExpanderSettings(),
+    expanderOrders: [],
+    loadedExpanderBatchIds: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
+  };
+}
+
+export function defaultExpanderSettings() {
+  return {
+    weekStart: defaultWeekStart(),
+    daysPerWeek: 6,
+    minutesPerDay: 1440,
+    shiftLength: 480,
+    truckBags: 52,
+    efficiency: { globalPercent: 100, byShift: {} },
+    colorFlipMinutes: 420,
+    sizeChangeoverMinutes: 0,
+    whiteCapacityThreshold: 60,
+    r3FeedRatio: 2,
+    baseInputKg: 550,
+    expanders: [
+      {
+        id: "E1",
+        name: "Expander 1",
+        enabled: true,
+        staffedShifts: [0, 1, 2],
+        mergeAdjacentWindows: true,
+        colors: ["black"],
+        defaultColor: "black"
+      },
+      {
+        id: "E2",
+        name: "Expander 2",
+        enabled: true,
+        staffedShifts: [0, 1, 2],
+        mergeAdjacentWindows: true,
+        colors: ["black", "white"],
+        defaultColor: "black"
+      }
+    ],
+    sizes: [
+      { id: "30X", size: "30X", batchMinutes: 90, batchesPerTruck: 6, bagsPerBatch: 52 / 6, baseInputKg: 550 },
+      { id: "35X", size: "35X", batchMinutes: 90, batchesPerTruck: 5.5, bagsPerBatch: 52 / 5.5, baseInputKg: 550 },
+      { id: "38X", size: "38X", batchMinutes: 110, batchesPerTruck: 5, bagsPerBatch: 52 / 5, baseInputKg: 550 },
+      { id: "45X", size: "45X", batchMinutes: 130, batchesPerTruck: 3.5, bagsPerBatch: 52 / 3.5, baseInputKg: 550 },
+      { id: "52X", size: "52X", batchMinutes: 160, batchesPerTruck: 3, bagsPerBatch: 52 / 3, baseInputKg: 550 }
+    ],
+    exclusions: [
+      { size: "45X", color: "", customer: "", productCode: "", grade: "", expander: "E1", note: "45X cannot run on Expander 1" },
+      { size: "52X", color: "", customer: "", productCode: "", grade: "", expander: "E1", note: "52X cannot run on Expander 1" }
+    ]
   };
 }
