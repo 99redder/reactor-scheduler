@@ -18,6 +18,7 @@ import {
 } from "./expanderScheduler.js";
 
 let state = dataStore.load();
+let pendingRestoreText = null;
 
 const els = {
   orderForm: document.querySelector("#orderForm"),
@@ -40,13 +41,23 @@ const els = {
   expanderSettingsForm: document.querySelector("#expanderSettingsForm"),
   guideContent: document.querySelector("#guideContent"),
   exportBtn: document.querySelector("#exportBtn"),
-  importFile: document.querySelector("#importFile")
+  importFile: document.querySelector("#importFile"),
+  backupStatus: document.querySelector("#backupStatus"),
+  backupReminder: document.querySelector("#backupReminder"),
+  dismissBackupReminder: document.querySelector("#dismissBackupReminder"),
+  restoreDialog: document.querySelector("#restoreDialog"),
+  cancelRestoreBtn: document.querySelector("#cancelRestoreBtn"),
+  confirmRestoreBtn: document.querySelector("#confirmRestoreBtn")
 };
+
+const BACKUP_META_KEY = "bead-scheduler-backup-meta";
+const BACKUP_REMINDER_DAYS = 7;
 
 setDefaultDueDate();
 setDefaultExpanderDueDate();
 syncOrderFormHints();
 render();
+renderBackupStatus();
 
 document.querySelectorAll(".tab-btn").forEach((button) => {
   button.addEventListener("click", () => {
@@ -116,17 +127,38 @@ els.exportBtn.addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `reactor-scheduler-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `Bead Scheduler Backup ${new Date().toISOString().slice(0, 10)}.backup`;
   link.click();
   URL.revokeObjectURL(url);
+  saveBackupMeta({ lastBackupAt: new Date().toISOString(), reminderDismissedAt: null });
+  renderBackupStatus();
 });
 
 els.importFile.addEventListener("change", async () => {
   const file = els.importFile.files[0];
   if (!file) return;
-  state = dataStore.import(await file.text());
-  render();
+  pendingRestoreText = await file.text();
+  els.restoreDialog.classList.remove("hidden");
+});
+
+els.cancelRestoreBtn.addEventListener("click", () => {
+  pendingRestoreText = null;
+  els.restoreDialog.classList.add("hidden");
   els.importFile.value = "";
+});
+
+els.confirmRestoreBtn.addEventListener("click", () => {
+  if (!pendingRestoreText) return;
+  state = dataStore.import(pendingRestoreText);
+  pendingRestoreText = null;
+  els.restoreDialog.classList.add("hidden");
+  els.importFile.value = "";
+  render();
+});
+
+els.dismissBackupReminder.addEventListener("click", () => {
+  saveBackupMeta({ ...loadBackupMeta(), reminderDismissedAt: new Date().toISOString() });
+  renderBackupStatus();
 });
 
 els.settingsForm.addEventListener("submit", (event) => {
@@ -230,6 +262,33 @@ function render() {
   renderExpanderSettings();
   renderExpanderUpsizeOptions();
   renderGuide();
+}
+
+function renderBackupStatus() {
+  const meta = loadBackupMeta();
+  els.backupStatus.textContent = meta.lastBackupAt
+    ? `Last backup: ${new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date(meta.lastBackupAt))}`
+    : "No backup saved yet";
+  els.backupReminder.classList.toggle("hidden", !shouldShowBackupReminder(meta));
+}
+
+function shouldShowBackupReminder(meta) {
+  if (!meta.lastBackupAt) return !meta.reminderDismissedAt;
+  const lastBackupAge = Date.now() - new Date(meta.lastBackupAt).getTime();
+  const dismissedAfterBackup = meta.reminderDismissedAt && new Date(meta.reminderDismissedAt).getTime() > new Date(meta.lastBackupAt).getTime();
+  return lastBackupAge > BACKUP_REMINDER_DAYS * 24 * 60 * 60 * 1000 && !dismissedAfterBackup;
+}
+
+function loadBackupMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(BACKUP_META_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBackupMeta(meta) {
+  localStorage.setItem(BACKUP_META_KEY, JSON.stringify(meta));
 }
 
 function renderReadout(schedule) {
@@ -411,7 +470,7 @@ function renderSettings() {
     </div>
     <div class="settings-block">
       <h2>Yield Table</h2>
-      <div class="note">Edit JSON directly for add/remove. Store bagsPerBatch for every size. For truckFillable rows, batchesPerTruck can derive/update bagsPerBatch; bag-only HBR rows use bagsPerBatch directly. Expanded rows use expanded: true and expanderBaseSize: 22.</div>
+      <div class="note">Advanced table editor. Store bagsPerBatch for every size. For truckFillable rows, batchesPerTruck can derive/update bagsPerBatch; bag-only HBR rows use bagsPerBatch directly. Expanded rows use expanded: true and expanderBaseSize: 22.</div>
       <textarea name="sizesJson" rows="9">${escapeHtml(JSON.stringify(s.sizes, null, 2))}</textarea>
     </div>
     <button type="submit">Save Settings</button>
@@ -539,7 +598,7 @@ function renderGuide() {
         <li><strong>Exclusion rules:</strong> routing rules for quality or machine limitations.</li>
         <li><strong>R3 feed ratio:</strong> ${round(expander.r3FeedRatio)} expander batches per R3 batch.</li>
       </ul>
-      <p>JSON export is the backup. Export regularly because data is stored in this browser.</p>
+      <p>Save a backup regularly because data is stored in this browser. The backup file is how you restore the app if browser data is cleared.</p>
       <table class="guide-table">
         <thead><tr><th>Expander Size</th><th>Batch Time</th><th>Batches / FTL</th><th>Bags / Batch</th></tr></thead>
         <tbody>${expanderBatchRows}</tbody>
@@ -549,7 +608,7 @@ function renderGuide() {
     <details>
       <summary>7. Limitations</summary>
       <p>This is a planning aid, not a control system. It assumes machines run as configured and Settings are accurate.</p>
-      <p>It does not track silo inventory, import orders automatically, or coordinate multiple users. It is designed for one user in one browser with JSON export as backup.</p>
+      <p>It does not track silo inventory, import orders automatically, or coordinate multiple users. It is designed for one user in one browser with backup files for protection.</p>
     </details>
   `;
 }

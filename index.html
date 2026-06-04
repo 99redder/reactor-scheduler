@@ -14,9 +14,22 @@
           <h1>Reactor Scheduler</h1>
           <p>Batch capacity, committed backlog, and due-date fit checks for R1/R2.</p>
         </div>
-        <div class="backup-controls">
-          <button id="exportBtn" type="button">Export JSON</button>
-          <label class="file-btn">Import JSON<input id="importFile" type="file" accept="application/json"></label>
+        <div class="backup-panel">
+          <div id="backupReminder" class="backup-reminder hidden">
+            <span>It's been a while since your last backup. Save one now to protect your data.</span>
+            <button id="dismissBackupReminder" class="secondary" type="button">Dismiss</button>
+          </div>
+          <div class="backup-status" id="backupStatus">No backup saved yet</div>
+          <div class="backup-controls">
+            <div class="backup-action">
+              <button id="exportBtn" type="button">Save a Backup</button>
+              <p>This saves all your orders and settings to a file on your computer. Do this regularly — if your browser data is ever cleared, this file is how you get everything back.</p>
+            </div>
+            <div class="backup-action">
+              <label class="file-btn">Restore from Backup<input id="importFile" type="file" accept="application/json,.backup"></label>
+              <p>Choose a backup file you saved earlier to bring back all your orders and settings. This replaces what's currently in the app.</p>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -159,6 +172,17 @@
           <div id="guideContent" class="guide-content"></div>
         </section>
       </section>
+
+      <div id="restoreDialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="restoreTitle">
+        <div class="modal-card">
+          <h2 id="restoreTitle">Restore from Backup?</h2>
+          <p>Restoring will replace all current orders and settings with the backup. Continue?</p>
+          <div class="actions">
+            <button id="cancelRestoreBtn" class="secondary" type="button">Cancel</button>
+            <button id="confirmRestoreBtn" type="button">Restore</button>
+          </div>
+        </div>
+      </div>
     </main>
     <script type="module" src="./src/app.js"></script>
   </body>

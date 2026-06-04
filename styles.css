@@ -193,6 +193,48 @@ p {
 
 .file-btn input { display: none; }
 
+.backup-panel {
+  max-width: 640px;
+  display: grid;
+  gap: 10px;
+}
+
+.backup-controls {
+  align-items: stretch;
+}
+
+.backup-action {
+  display: grid;
+  gap: 7px;
+  flex: 1 1 260px;
+}
+
+.backup-action p,
+.backup-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.backup-status {
+  font-weight: 750;
+  color: var(--soft-ink);
+}
+
+.backup-reminder {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: #fff7ef;
+  border: 1px solid #f4c39e;
+  color: #6e3510;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .view-tabs {
   display: flex;
   gap: 10px;
@@ -510,6 +552,31 @@ tr:hover td {
 
 .guide-table {
   margin-top: 14px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, .38);
+  padding: 20px;
+}
+
+.modal-card {
+  width: min(440px, 100%);
+  background: #fff;
+  border-top: 3px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.modal-card p {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--soft-ink);
+  margin: 12px 0 18px;
 }
 
 textarea {
