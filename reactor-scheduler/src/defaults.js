@@ -15,6 +15,9 @@ export function defaultSettings() {
       esdMinutes: 45,
       blackWhiteMinutes: 540
     },
+    reactorExclusions: [
+      { customer: "Cambro", productCode: "", size: 20, family: "", grade: "", color: "", reactor: "R2", note: "Cambro size-20 barred from R2" }
+    ],
     sizes: [
       { id: "13.5-HBS", size: 13.5, family: "HBS", truckFillable: true, batchesPerTruck: 9, bagsPerBatch: 52 / 9, expanded: false, expanderBaseSize: 22 },
       { id: "15-HBS", size: 15, family: "HBS", truckFillable: true, batchesPerTruck: 8, bagsPerBatch: 52 / 8, expanded: false, expanderBaseSize: 22 },
