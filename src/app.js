@@ -1,4 +1,5 @@
 import { dataStore } from "./storage.js";
+import { extractOrdersFromImage, parseExtractedOrders, validateExtractedRow } from "./imageImport.js";
 import {
   batchesNeeded,
   checkCandidateFit,
@@ -314,6 +315,326 @@ function parseCsvRow(line) {
   cols.push(cur);
   return cols;
 }
+
+// ── Screenshot import ─────────────────────────────────────────────────────────
+
+const screenshotState = { dataUrl: null, base64: null, mediaType: null };
+
+function screenshotApiKey() {
+  const stored = sessionStorage.getItem("screenshot-api-key") || "";
+  const input = document.querySelector("#screenshotApiKey");
+  const val = input ? input.value.trim() : "";
+  return val || stored;
+}
+
+document.querySelector("#screenshotApiKey").addEventListener("change", (e) => {
+  const val = e.target.value.trim();
+  if (val) sessionStorage.setItem("screenshot-api-key", val);
+  else sessionStorage.removeItem("screenshot-api-key");
+});
+
+// Pre-fill from session
+(function () {
+  const stored = sessionStorage.getItem("screenshot-api-key");
+  if (stored) document.querySelector("#screenshotApiKey").value = stored;
+})();
+
+function setScreenshotImage(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    setScreenshotStatus("That file doesn't look like an image (PNG, JPG, or WebP expected).", "warn");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    const comma = dataUrl.indexOf(",");
+    screenshotState.base64 = dataUrl.slice(comma + 1);
+    screenshotState.mediaType = file.type;
+    screenshotState.dataUrl = dataUrl;
+    document.querySelector("#screenshotPreviewThumb").src = dataUrl;
+    document.querySelector("#screenshotPreviewWrap").classList.remove("hidden");
+    setScreenshotStatus("", "");
+  };
+  reader.readAsDataURL(file);
+}
+
+document.querySelector("#screenshotFileInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) setScreenshotImage(file);
+});
+
+document.querySelector("#screenshotImportSection").addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items || [];
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      setScreenshotImage(item.getAsFile());
+      break;
+    }
+  }
+});
+
+document.querySelector("#screenshotClearBtn").addEventListener("click", () => {
+  screenshotState.dataUrl = null;
+  screenshotState.base64 = null;
+  screenshotState.mediaType = null;
+  document.querySelector("#screenshotPreviewThumb").src = "";
+  document.querySelector("#screenshotPreviewWrap").classList.add("hidden");
+  setScreenshotStatus("", "");
+});
+
+document.querySelector("#screenshotExtractBtn").addEventListener("click", async () => {
+  if (!screenshotState.base64) {
+    setScreenshotStatus("No image loaded — upload or paste an image first.", "warn");
+    return;
+  }
+  const apiKey = screenshotApiKey();
+  if (!apiKey) {
+    setScreenshotStatus("An Anthropic API key is required. Enter it in the field above, then try again. You can get a key at console.anthropic.com.", "warn");
+    return;
+  }
+  const btn = document.querySelector("#screenshotExtractBtn");
+  btn.disabled = true;
+  btn.textContent = "Extracting…";
+  setScreenshotStatus("Sending image to Claude — this takes a few seconds…", "");
+  try {
+    const rawText = await extractOrdersFromImage(screenshotState.base64, screenshotState.mediaType, apiKey);
+    const { rows, parseError } = parseExtractedOrders(rawText);
+    if (parseError) {
+      setScreenshotStatus(parseError, "warn");
+      return;
+    }
+    openReviewModal(rows, screenshotState.dataUrl);
+    setScreenshotStatus("", "");
+  } catch (err) {
+    setScreenshotStatus(err.message, "warn");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Extract Orders from Image";
+  }
+});
+
+function setScreenshotStatus(msg, type) {
+  const el = document.querySelector("#screenshotStatus");
+  el.textContent = msg;
+  el.className = type ? `result ${type}` : "result";
+}
+
+// ── Review modal ──────────────────────────────────────────────────────────────
+
+let reviewRows = [];
+
+function openReviewModal(extractedRows, imageDataUrl) {
+  reviewRows = extractedRows.map((raw) => {
+    const { fields } = validateExtractedRow(raw);
+    return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.value]));
+  });
+  if (reviewRows.length === 0) {
+    reviewRows = [emptyReviewRow()];
+  }
+  document.querySelector("#screenshotReviewImg").src = imageDataUrl;
+  document.querySelector("#screenshotReviewModal").classList.remove("hidden");
+  renderReviewTable();
+}
+
+function emptyReviewRow() {
+  return { company: "", location: "", size: "", family: "HBS", color: "black", grade: "standard", order_type: "bulk", quantity: "", due_date: "" };
+}
+
+function renderReviewTable() {
+  const total = reviewRows.length;
+  const validCount = reviewRows.filter((row) => validateExtractedRow(rawValuesToExtracted(row)).valid).length;
+  document.querySelector("#screenshotReviewSummary").textContent =
+    `${total} order${total === 1 ? "" : "s"} read — review each row, correct anything flagged in yellow, then click Confirm. Nothing is added until you confirm.`;
+
+  const flaggedCount = total - validCount;
+  if (flaggedCount > 0) {
+    document.querySelector("#screenshotReviewSummary").textContent +=
+      ` (${flaggedCount} row${flaggedCount === 1 ? " needs" : "s need"} attention — fields highlighted in yellow couldn't be read clearly.)`;
+  }
+
+  const tbody = reviewRows.map((row, i) => {
+    const { fields, errors } = validateExtractedRow(rawValuesToExtracted(row));
+    const rowClass = errors.length ? "review-row-invalid" : "review-row-valid";
+    const cell = (name, type, opts = "") => {
+      const f = fields[name];
+      const val = escapeAttr(row[name] ?? "");
+      const flagClass = f.flagged ? "flagged-field" : "";
+      const title = f.flagged ? `couldn't read — please check` : "";
+      if (type === "select") {
+        const options = opts.map((o) => `<option value="${o}" ${row[name] === o ? "selected" : ""}>${o}</option>`).join("");
+        return `<td class="${flagClass}"><select data-row="${i}" data-field="${name}" title="${escapeAttr(title)}">${options}</select></td>`;
+      }
+      return `<td class="${flagClass}"><input type="${type}" data-row="${i}" data-field="${name}" value="${val}" placeholder="${escapeAttr(title || name)}" title="${escapeAttr(title)}"></td>`;
+    };
+    const errorHtml = errors.length
+      ? `<tr class="review-row-errors"><td colspan="10"><span class="row-error-list">${errors.map(escapeHtml).join(" · ")}</span></td></tr>`
+      : "";
+    return `<tr class="${rowClass}">
+      ${cell("company", "text")}
+      ${cell("location", "text")}
+      ${cell("size", "number")}
+      ${cell("family", "select", ["HBS", "HBR"])}
+      ${cell("color", "select", ["black", "white", "green", "yellow"])}
+      ${cell("grade", "select", ["standard", "ESD"])}
+      ${cell("order_type", "select", ["bulk", "bag"])}
+      ${cell("quantity", "number")}
+      ${cell("due_date", "text")}
+      <td><button class="danger review-delete-btn" data-row="${i}" type="button" title="Remove this row">✕</button></td>
+    </tr>${errorHtml}`;
+  }).join("");
+
+  document.querySelector("#screenshotReviewTable").innerHTML = `
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th>Company</th><th>Location</th><th>Size</th><th>Family</th>
+          <th>Color</th><th>Grade</th><th>Type</th><th>Qty</th><th>Due date</th><th></th>
+        </tr>
+      </thead>
+      <tbody>${tbody}</tbody>
+    </table>
+  `;
+}
+
+function rawValuesToExtracted(row) {
+  return {
+    company: row.company || null,
+    location: row.location || null,
+    size: row.size !== "" && row.size !== undefined ? Number(row.size) : null,
+    family: row.family || null,
+    color: row.color || null,
+    grade: row.grade || null,
+    order_type: row.order_type || null,
+    quantity: row.quantity !== "" && row.quantity !== undefined ? Number(row.quantity) : null,
+    due_date: row.due_date || null
+  };
+}
+
+document.querySelector("#screenshotReviewTable").addEventListener("input", (e) => {
+  const { row, field } = e.target.dataset;
+  if (row === undefined || !field) return;
+  reviewRows[Number(row)][field] = e.target.value;
+  // Re-render validation state without disturbing focused input — just update classes
+  updateReviewRowState(Number(row));
+});
+
+document.querySelector("#screenshotReviewTable").addEventListener("change", (e) => {
+  const { row, field } = e.target.dataset;
+  if (row === undefined || !field) return;
+  reviewRows[Number(row)][field] = e.target.value;
+  updateReviewRowState(Number(row));
+});
+
+document.querySelector("#screenshotReviewTable").addEventListener("click", (e) => {
+  const btn = e.target.closest(".review-delete-btn");
+  if (!btn) return;
+  const i = Number(btn.dataset.row);
+  reviewRows.splice(i, 1);
+  renderReviewTable();
+});
+
+function updateReviewRowState(rowIndex) {
+  const { errors, fields } = validateExtractedRow(rawValuesToExtracted(reviewRows[rowIndex]));
+  const table = document.querySelector("#screenshotReviewTable table");
+  if (!table) return;
+  const rows = table.querySelectorAll("tbody tr");
+  // Find the main row (not error sub-row) for this index
+  let mainRow = null;
+  let count = 0;
+  for (const tr of rows) {
+    if (!tr.classList.contains("review-row-errors")) {
+      if (count === rowIndex) { mainRow = tr; break; }
+      count++;
+    }
+  }
+  if (!mainRow) return;
+  mainRow.className = errors.length ? "review-row-invalid" : "review-row-valid";
+  // Update per-cell flag classes
+  mainRow.querySelectorAll("[data-field]").forEach((input) => {
+    const f = fields[input.dataset.field];
+    if (f) input.closest("td").className = f.flagged ? "flagged-field" : "";
+  });
+  // Update or remove error sub-row
+  const nextRow = mainRow.nextElementSibling;
+  const hasErrorRow = nextRow && nextRow.classList.contains("review-row-errors");
+  if (errors.length) {
+    const errorHtml = `<span class="row-error-list">${errors.map(escapeHtml).join(" · ")}</span>`;
+    if (hasErrorRow) {
+      nextRow.querySelector("td").innerHTML = errorHtml;
+    } else {
+      const errTr = document.createElement("tr");
+      errTr.className = "review-row-errors";
+      errTr.innerHTML = `<td colspan="10">${errorHtml}</td>`;
+      mainRow.insertAdjacentElement("afterend", errTr);
+    }
+  } else if (hasErrorRow) {
+    nextRow.remove();
+  }
+}
+
+document.querySelector("#addScreenshotRow").addEventListener("click", () => {
+  reviewRows.push(emptyReviewRow());
+  renderReviewTable();
+  // Focus first cell of new row
+  const inputs = document.querySelectorAll("#screenshotReviewTable [data-row]");
+  const lastRowInputs = [...inputs].filter((el) => Number(el.dataset.row) === reviewRows.length - 1);
+  if (lastRowInputs[0]) lastRowInputs[0].focus();
+});
+
+document.querySelector("#cancelScreenshotReview").addEventListener("click", () => {
+  document.querySelector("#screenshotReviewModal").classList.add("hidden");
+  document.querySelector("#screenshotReviewErrors").classList.add("hidden");
+});
+
+document.querySelector("#confirmScreenshotReview").addEventListener("click", () => {
+  const errorsEl = document.querySelector("#screenshotReviewErrors");
+  const allErrors = [];
+  const validOrders = [];
+
+  reviewRows.forEach((row, i) => {
+    const result = validateExtractedRow(rawValuesToExtracted(row));
+    if (!result.valid) {
+      allErrors.push(`Row ${i + 1} (${row.company || "no company"}): ${result.errors.join("; ")}`);
+    } else {
+      const size = Number(row.size);
+      const family = row.family || "HBS";
+      const orderType = row.order_type;
+      const quantity = Number(row.quantity);
+      const truckFillable = isTruckFillable(state.settings, size, family);
+      const bags = truckFillable && orderType === "bulk" ? quantity * Number(state.settings.truckBags) : quantity;
+      validOrders.push({
+        company: row.company.trim(),
+        location: (row.location || "").trim(),
+        customer: customerLabel(row.company.trim(), (row.location || "").trim()) || row.company.trim(),
+        productCode: "",
+        family,
+        size,
+        quantityBags: bags,
+        grade: row.grade || "standard",
+        color: row.color,
+        preferredReactor: "",
+        expanded: false,
+        dueDate: row.due_date,
+        week: state.viewWeek || "this"
+      });
+    }
+  });
+
+  if (allErrors.length) {
+    errorsEl.textContent = `Please fix these issues before confirming: ${allErrors.join(" | ")}`;
+    errorsEl.classList.remove("hidden");
+    return;
+  }
+
+  errorsEl.classList.add("hidden");
+  const week = state.viewWeek || "this";
+  const newOrders = validOrders.map((o) => ({ ...o, id: crypto.randomUUID(), createdAt: new Date().toISOString() }));
+  state.orders = [...state.orders, ...newOrders];
+  saveAndRender();
+  document.querySelector("#screenshotReviewModal").classList.add("hidden");
+  setScreenshotStatus(`${newOrders.length} order${newOrders.length === 1 ? "" : "s"} added to ${week === "next" ? "next" : "this"} week's schedule.`, "ok");
+});
 
 els.exportBtn.addEventListener("click", () => {
   const blob = new Blob([dataStore.export(state)], { type: "application/json" });

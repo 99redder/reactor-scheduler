@@ -50,6 +50,28 @@
             <label class="file-btn secondary">Import CSV<input id="importReactorCsv" type="file" accept=".csv,text/csv"></label>
             <div id="csvImportResult" class="result"></div>
           </div>
+          <details id="screenshotImportSection" class="screenshot-import-section">
+            <summary>Import from screenshot</summary>
+            <div class="screenshot-import-body">
+              <p class="note">Upload or paste a photo of your logistics schedule. The app will read the orders and show them for you to review and confirm — nothing is added until you approve.</p>
+              <div class="api-key-row">
+                <label>Anthropic API key (required for vision)
+                  <input id="screenshotApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
+                </label>
+                <span class="field-help">Stored in this browser tab only — never saved to your backup file.</span>
+              </div>
+              <div class="screenshot-upload-row">
+                <label class="file-btn secondary">Choose image<input id="screenshotFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+                <span class="screenshot-or">or paste (Ctrl+V / ⌘V) with this section open</span>
+              </div>
+              <div id="screenshotPreviewWrap" class="screenshot-preview-wrap hidden">
+                <img id="screenshotPreviewThumb" class="screenshot-thumb" alt="Uploaded schedule preview">
+                <button id="screenshotExtractBtn" type="button">Extract Orders from Image</button>
+                <button id="screenshotClearBtn" class="secondary" type="button">Clear</button>
+              </div>
+              <div id="screenshotStatus" class="result"></div>
+            </div>
+          </details>
           <div class="form-grid">
             <label>Company<select name="company" required></select></label>
             <label>Location / State<select name="location"></select></label>
@@ -182,6 +204,31 @@
           <div id="guideContent" class="guide-content"></div>
         </section>
       </section>
+
+      <div id="screenshotReviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="screenshotReviewTitle">
+        <div class="modal-card screenshot-review-card">
+          <div class="screenshot-review-header">
+            <h2 id="screenshotReviewTitle">Review Extracted Orders</h2>
+            <p id="screenshotReviewSummary" class="note"></p>
+          </div>
+          <div class="screenshot-review-body">
+            <div class="screenshot-review-image">
+              <img id="screenshotReviewImg" alt="Uploaded schedule" class="screenshot-review-thumb">
+            </div>
+            <div class="screenshot-review-table-wrap">
+              <div id="screenshotReviewTable"></div>
+            </div>
+          </div>
+          <div class="screenshot-review-footer">
+            <div id="screenshotReviewErrors" class="result warn hidden"></div>
+            <div class="actions">
+              <button id="cancelScreenshotReview" class="secondary" type="button">Cancel</button>
+              <button id="addScreenshotRow" class="secondary" type="button">+ Add Row</button>
+              <button id="confirmScreenshotReview" type="button">Confirm Import</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div id="restoreDialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="restoreTitle">
         <div class="modal-card">
