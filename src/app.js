@@ -1399,7 +1399,17 @@ function fitText(result, settings = state.settings) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
   const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(settings.weekStart, result.completion, settings));
   const reactors = result.reactors?.length ? result.reactors.join(", ") : "none";
-  return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, reactor(s) ${reactors}.`;
+  let text = `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, reactor(s) ${reactors}.`;
+  if (result.displaced?.length) {
+    const names = [...new Set(result.displaced.map((b) => b.customer || b.orderId))].join(", ");
+    text += ` Adding this would displace: ${names}.`;
+  }
+  if (result.overcommittedDays?.length) {
+    const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const days = result.overcommittedDays.map((d) => `${dayNames[d.day] || `Day ${d.day + 1}`} (${d.reactorId}: ${d.batchesInDay}/${d.capacity} batches)`).join(", ");
+    text += ` Overcommitted: ${days}.`;
+  }
+  return text;
 }
 
 function showExpanderFitResult(result, el, settings = state.expanderSettings) {

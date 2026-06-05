@@ -277,6 +277,8 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
   const completion = candidateEvents.length ? Math.max(...candidateEvents.map((event) => event.end)) : null;
   const produceBy = produceByDate(candidate.dueDate, settings);
   const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy, settings) : Number.MAX_SAFE_INTEGER;
+  const displaced = schedule.unscheduled.filter((b) => b.orderId !== candidate.id);
+  const overcommittedDays = getOvercommittedDays(schedule, settings);
   return {
     status: candidateEvents.length ? "scheduled" : "blocked",
     message: candidateEvents.length ? "" : exclusionMessage(candidate, settings),
@@ -287,8 +289,29 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
     deliveryDate: candidate.dueDate || "",
     produceByDate: produceBy || "",
     reactors: [...new Set(candidateEvents.map((event) => event.reactorId))],
+    displaced,
+    overcommittedDays,
     schedule
   };
+}
+
+function getOvercommittedDays(schedule, settings) {
+  const days = [];
+  for (let day = 0; day < settings.daysPerWeek; day++) {
+    const dayStart = day * settings.minutesPerDay;
+    const dayEnd = dayStart + settings.minutesPerDay;
+    for (const reactor of schedule.reactors) {
+      const batchesInDay = reactor.events.filter((e) => e.type === "batch" && e.start >= dayStart && e.start < dayEnd).length;
+      const windowMinutes = reactor.windows
+        .filter((w) => w.start < dayEnd && w.end > dayStart)
+        .reduce((sum, w) => sum + Math.min(w.end, dayEnd) - Math.max(w.start, dayStart), 0);
+      const capacity = Math.floor(windowMinutes / settings.batchMinutes);
+      if (batchesInDay > capacity) {
+        days.push({ day, reactorId: reactor.id, batchesInDay, capacity });
+      }
+    }
+  }
+  return days;
 }
 
 function orderBatchesForScheduling(batches, settings) {
