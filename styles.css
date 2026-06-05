@@ -364,6 +364,21 @@ p {
   gap: 6px;
 }
 
+.import-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.import-bar .result {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
 .legend span {
   color: var(--muted);
   font-size: 12px;

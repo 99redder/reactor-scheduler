@@ -194,6 +194,127 @@ els.expanderUpsizeForm.addEventListener("submit", (event) => {
   els.expanderUpsizeResult.className = `result ${result.fits ? "ok" : "warn"}`;
 });
 
+const REACTOR_CSV_HEADERS = ["company", "location", "size", "family", "color", "grade", "order_type", "quantity", "due_date", "preferred_reactor"];
+
+document.querySelector("#downloadReactorTemplate").addEventListener("click", () => {
+  const example = [
+    ["Ventek", "OH", "15", "HBS", "black", "standard", "bulk", "1", "2026-06-13T16:00", ""],
+    ["Cambro", "", "20", "HBS", "black", "standard", "bag", "52", "2026-06-14T12:00", "R1"]
+  ];
+  const rows = [REACTOR_CSV_HEADERS, ...example].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const blob = new Blob([rows], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "reactor-order-template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+});
+
+document.querySelector("#importReactorCsv").addEventListener("change", async () => {
+  const file = document.querySelector("#importReactorCsv").files[0];
+  const resultEl = document.querySelector("#csvImportResult");
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const { orders: parsed, errors } = parseReactorCsv(text);
+    document.querySelector("#importReactorCsv").value = "";
+    if (errors.length) {
+      resultEl.textContent = `Import stopped: ${errors.join(" | ")}`;
+      resultEl.className = "result warn";
+      return;
+    }
+    if (!parsed.length) {
+      resultEl.textContent = "No data rows found in the file.";
+      resultEl.className = "result warn";
+      return;
+    }
+    const week = state.viewWeek || "this";
+    const newOrders = parsed.map((order) => ({ ...order, week, id: crypto.randomUUID(), createdAt: new Date().toISOString() }));
+    state.orders = [...state.orders, ...newOrders];
+    saveAndRender();
+    resultEl.textContent = `Imported ${newOrders.length} order(s) for ${week === "next" ? "next" : "this"} week.`;
+    resultEl.className = "result ok";
+  } catch (err) {
+    resultEl.textContent = `Could not read file: ${err.message}`;
+    resultEl.className = "result warn";
+  }
+});
+
+function parseReactorCsv(text) {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(Boolean);
+  if (lines.length < 2) return { orders: [], errors: ["File has no data rows (need a header row + at least one order row)."] };
+  const headers = parseCsvRow(lines[0]).map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  const idx = (name) => headers.indexOf(name);
+  const required = ["company", "size", "color", "order_type", "quantity", "due_date"];
+  const missing = required.filter((h) => idx(h) === -1);
+  if (missing.length) return { orders: [], errors: [`Missing required columns: ${missing.join(", ")}. Download the template to see the expected format.`] };
+  const orders = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvRow(lines[i]);
+    const get = (name) => (cols[idx(name)] || "").trim();
+    const rowNum = i + 1;
+    const company = get("company");
+    const size = Number(get("size"));
+    const color = get("color").toLowerCase();
+    const orderType = get("order_type").toLowerCase() === "bag" ? "bag" : "bulk";
+    const quantityRaw = get("quantity");
+    const quantity = Number(quantityRaw);
+    const dueDate = get("due_date");
+    const family = get("family") || (size >= 30 ? "HBS" : size > 0 ? "HBS" : "HBS");
+    const grade = get("grade") || "standard";
+    const preferredReactor = get("preferred_reactor") || "";
+    const location = get("location") || "";
+    if (!company) { errors.push(`Row ${rowNum}: company is required.`); continue; }
+    if (!size || isNaN(size)) { errors.push(`Row ${rowNum}: size must be a number (got "${get("size")}").`); continue; }
+    if (!color) { errors.push(`Row ${rowNum}: color is required.`); continue; }
+    if (!quantityRaw || quantityRaw === "") { errors.push(`Row ${rowNum}: quantity is required — enter a number, never leave it blank.`); continue; }
+    if (isNaN(quantity) || quantity < 1) { errors.push(`Row ${rowNum}: quantity must be a whole number ≥ 1 (got "${quantityRaw}").`); continue; }
+    if (!dueDate) { errors.push(`Row ${rowNum}: due_date is required (use format 2026-06-13T16:00).`); continue; }
+    const truckFillable = isTruckFillable(state.settings, size, family);
+    const bags = truckFillable && orderType === "bulk" ? quantity * Number(state.settings.truckBags) : quantity;
+    const customerName = customerLabel(company, location) || company;
+    orders.push({
+      company,
+      location,
+      customer: customerName,
+      productCode: "",
+      family,
+      size,
+      quantityBags: bags,
+      grade,
+      color,
+      preferredReactor,
+      expanded: false,
+      dueDate
+    });
+  }
+  return { orders, errors };
+}
+
+function parseCsvRow(line) {
+  const cols = [];
+  let cur = "";
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuote) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') { inQuote = false; }
+      else { cur += ch; }
+    } else if (ch === '"') {
+      inQuote = true;
+    } else if (ch === ",") {
+      cols.push(cur); cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  cols.push(cur);
+  return cols;
+}
+
 els.exportBtn.addEventListener("click", () => {
   const blob = new Blob([dataStore.export(state)], { type: "application/json" });
   const url = URL.createObjectURL(blob);

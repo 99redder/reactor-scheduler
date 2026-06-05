@@ -45,6 +45,11 @@
       <section class="workspace-grid">
         <form id="orderForm" class="panel">
           <h2>Add Order</h2>
+          <div class="import-bar">
+            <button id="downloadReactorTemplate" class="secondary" type="button">Download CSV Template</button>
+            <label class="file-btn secondary">Import CSV<input id="importReactorCsv" type="file" accept=".csv,text/csv"></label>
+            <div id="csvImportResult" class="result"></div>
+          </div>
           <div class="form-grid">
             <label>Company<select name="company" required></select></label>
             <label>Location / State<select name="location"></select></label>
