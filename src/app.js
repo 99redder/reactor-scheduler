@@ -52,6 +52,7 @@ const els = {
 
 const BACKUP_META_KEY = "bead-scheduler-backup-meta";
 const BACKUP_REMINDER_DAYS = 7;
+const ADD_CUSTOMER_VALUE = "__add_customer__";
 
 setDefaultDueDate();
 setDefaultExpanderOrderForm();
@@ -79,6 +80,7 @@ els.orderForm.addEventListener("submit", (event) => {
 });
 
 document.querySelector("#checkBtn").addEventListener("click", () => {
+  if (!validateCustomerSelection(els.orderForm, els.fitResult)) return;
   if (!validateReactorOrderQuantity()) return;
   const candidate = readOrderForm();
   const result = checkCandidateFit(state.orders, candidate, state.settings, state.loadedBatchIds);
@@ -114,6 +116,7 @@ els.expanderOrderForm.addEventListener("submit", (event) => {
 });
 
 document.querySelector("#expanderCheckBtn").addEventListener("click", () => {
+  if (!validateCustomerSelection(els.expanderOrderForm, els.expanderFitResult)) return;
   if (!validateQuantity(els.expanderOrderForm, "quantity", els.expanderFitResult)) return;
   const result = checkExpanderFit(state.expanderOrders, readExpanderOrderForm(), state.expanderSettings, state.loadedExpanderBatchIds);
   showExpanderFitResult(result, els.expanderFitResult);
@@ -177,6 +180,7 @@ els.dismissBackupReminder.addEventListener("click", () => {
 
 els.settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  applyCustomerSettings();
   state.settings = readSettingsForm();
   saveAndRender();
 });
@@ -201,6 +205,14 @@ els.expanderSettingsForm.addEventListener("input", () => updateRulePreviews("exp
 
 els.orderForm.addEventListener("input", (event) => {
   if (["family", "size", "orderType"].includes(event.target.name)) syncOrderFormHints();
+});
+
+els.orderForm.addEventListener("change", (event) => {
+  if (event.target.name === "customer") handleCustomerSelect(event.target);
+});
+
+els.expanderOrderForm.addEventListener("change", (event) => {
+  if (event.target.name === "customer") handleCustomerSelect(event.target);
 });
 
 els.ordersTable.addEventListener("click", (event) => {
@@ -278,6 +290,7 @@ function readExpanderOrderForm() {
 function render() {
   const schedule = scheduleOrders(state.orders, state.settings, state.loadedBatchIds);
   const expanderSchedule = scheduleExpanderOrders(state.expanderOrders, state.expanderSettings, state.loadedExpanderBatchIds);
+  renderCustomerSelects();
   renderReadout(schedule);
   renderTimeline(schedule);
   renderOrders(schedule);
@@ -289,6 +302,35 @@ function render() {
   renderExpanderSettings();
   renderExpanderUpsizeOptions();
   renderGuide();
+}
+
+function renderCustomerSelects(selectedValue = "", formId = "") {
+  [els.orderForm, els.expanderOrderForm].forEach((form) => {
+    const select = form.querySelector('[name="customer"]');
+    if (!select) return;
+    const current = form.id === formId && selectedValue ? selectedValue : select.value;
+    select.innerHTML = `
+      ${option("", state.customers.length ? "Select customer" : "Add a customer first", !current)}
+      ${state.customers.map((customer) => option(customer, customer, current === customer)).join("")}
+      ${option(ADD_CUSTOMER_VALUE, "+ Add new customer", false)}
+    `;
+  });
+}
+
+function handleCustomerSelect(select) {
+  if (select.value !== ADD_CUSTOMER_VALUE) return;
+  const name = prompt("Customer name");
+  const added = addCustomerName(name);
+  renderCustomerSelects(added, select.closest("form")?.id || "");
+}
+
+function addCustomerName(value) {
+  const name = String(value || "").trim();
+  if (!name) return "";
+  state.customers = normalizeCustomerNames([...state.customers, name]);
+  state = dataStore.save(state);
+  render();
+  return name;
 }
 
 function renderBackupStatus() {
@@ -424,7 +466,7 @@ function renderOrders(schedule) {
           const expander = isExpanderOrder(order, state.settings);
           const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)))) : expander ? "expanded route" : "not scheduled";
           return `<tr>
-            <td>${escapeHtml(order.customer)}<br><span class="note">${escapeHtml(order.productCode || "")}</span></td>
+            <td>${escapeHtml(order.customer)}</td>
             <td>${order.family} ${order.size}${order.expanded ? "X" : ""} ${order.grade} ${order.color}${order.preferredReactor ? ` -> ${order.preferredReactor}` : ""}</td>
             <td>${order.quantityBags}</td>
             <td>${batchesNeeded(order, state.settings)}</td>
@@ -449,7 +491,7 @@ function renderExpanderOrders(schedule) {
           const events = byOrder.get(order.id) || [];
           const completion = events.length ? fmt(expanderMinutesToDate(state.expanderSettings.weekStart, Math.max(...events.map((event) => event.end)))) : "not scheduled";
           return `<tr>
-            <td>${escapeHtml(order.customer)}<br><span class="note">${escapeHtml(order.productCode || "")}</span></td>
+            <td>${escapeHtml(order.customer)}</td>
             <td>${order.size} ${order.grade} ${order.color}${order.preferredExpander ? ` -> ${order.preferredExpander}` : ""}</td>
             <td>${order.quantity} ${order.orderType === "bulk" ? "truck(s)" : "bags"}</td>
             <td>${expanderBatchesNeeded(order, state.expanderSettings)}</td>
@@ -494,6 +536,11 @@ function renderSettings() {
       ${settingField("Black / white switch time (minutes)", "blackWhiteMinutes", "number", s.changeovers.blackWhiteMinutes, "Added only when R2 switches between black and white.")}
     </div>
     <div class="settings-block">
+      <h2>Customers</h2>
+      <div class="note">Customer names are the buyer/location labels used on order forms and schedule blocks.</div>
+      ${renderCustomerEditor()}
+    </div>
+    <div class="settings-block">
       <h2>Reactors</h2>
       ${s.reactors.map((reactor, index) => `
         <div class="settings-row">
@@ -508,7 +555,7 @@ function renderSettings() {
     </div>
     <div class="settings-block">
       <h2>Reactor Exclusion Rules</h2>
-      <div class="note">Use these when a customer, size, color, or product is not allowed on a reactor. "Any" means the rule applies broadly.</div>
+      <div class="note">Use these when a customer, size, color, or grade is not allowed on a reactor. "Any" means the rule applies broadly.</div>
       ${renderExclusionEditor(s.reactorExclusions || [], s.reactors.filter((reactor) => reactor.id !== "R3"), "reactor")}
     </div>
     <div class="settings-block">
@@ -549,7 +596,7 @@ function renderExpanderSettings() {
     </div>
     <div class="settings-block">
       <h2>Expander Exclusion Rules</h2>
-      <div class="note">Use these when a size, customer, color, or product is not allowed on an expander. "Any" means the rule applies broadly.</div>
+      <div class="note">Use these when a size, customer, color, or grade is not allowed on an expander. "Any" means the rule applies broadly.</div>
       ${renderExclusionEditor(s.exclusions || [], s.expanders, "expander")}
     </div>
     <div class="settings-block">
@@ -563,6 +610,31 @@ function renderExpanderSettings() {
 
 function settingField(label, name, type, value, help, step = "1") {
   return `<label>${label}<input name="${name}" type="${type}" ${type === "number" ? `step="${step}"` : ""} value="${escapeAttr(value)}"><span class="field-help">${help}</span></label>`;
+}
+
+function renderCustomerEditor() {
+  return `
+    <div class="friendly-table-wrap">
+      <table class="friendly-table">
+        <thead><tr><th>Customer</th><th></th></tr></thead>
+        <tbody>
+          ${state.customers.map((customer, index) => `
+            <tr>
+              <td><input name="customer-${index}-name" value="${escapeAttr(customer)}"></td>
+              <td><button class="danger" data-action="remove-customer" data-index="${index}" type="button">Remove</button></td>
+            </tr>
+          `).join("") || `<tr><td colspan="2">No customers yet. Add one from an order form or below.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <details class="add-form">
+      <summary>Add Customer</summary>
+      <div class="settings-row">
+        <label>Customer name<input name="newCustomerName" placeholder="Ventek OH"></label>
+      </div>
+      <button class="secondary" data-action="add-customer" type="button">Add Customer</button>
+    </details>
+  `;
 }
 
 function renderYieldTable(rows, truckBags) {
@@ -668,7 +740,6 @@ function exclusionControls(row, machines, kind, index) {
     <label>Customer<select name="${prefix}-customer">${option("", "Any", !row.customer)}${knownOptions("customer", row.customer)}</select></label>
     <label>Size<select name="${prefix}-size">${option("", "Any", !row.size)}${sizeOptions(kind, row.size)}</select></label>
     <label>Color<select name="${prefix}-color">${option("", "Any", !row.color)}${["black", "white", "green", "yellow"].map((color) => option(color, title(color), row.color === color)).join("")}</select></label>
-    <label>Product code<input name="${prefix}-productCode" value="${escapeAttr(row.productCode || row.product || "")}" placeholder="Any"></label>
     <label>Grade<input name="${prefix}-grade" value="${escapeAttr(row.grade || "")}" placeholder="Any"></label>
     <label>Cannot run on<select name="${prefix}-machine">${machines.map((machine) => option(machine.id, machine.name || machine.id, machineValue === machine.id)).join("")}</select></label>
   `;
@@ -680,7 +751,8 @@ function option(value, label, selected = false) {
 
 function knownOptions(field, selectedValue = "") {
   const values = new Set();
-  [...state.orders, ...state.expanderOrders].forEach((order) => {
+  if (field === "customer") state.customers.forEach((customer) => values.add(customer));
+  else [...state.orders, ...state.expanderOrders].forEach((order) => {
     if (order[field]) values.add(String(order[field]));
   });
   [...(state.settings.reactorExclusions || []), ...(state.expanderSettings.exclusions || [])].forEach((rule) => {
@@ -706,7 +778,6 @@ function sizeOptions(kind, selectedValue = "") {
 function exclusionSentence(row, kind) {
   const pieces = [];
   if (row.customer) pieces.push(row.customer);
-  if (row.productCode || row.product) pieces.push(row.productCode || row.product);
   if (row.size) pieces.push(`size-${row.size}`);
   if (row.color) pieces.push(title(row.color));
   if (row.grade) pieces.push(`${row.grade} grade`);
@@ -913,11 +984,49 @@ function readExpanderSettingsForm() {
   };
 }
 
+function applyCustomerSettings() {
+  const form = new FormData(els.settingsForm);
+  const previous = [...state.customers];
+  const next = normalizeCustomerNames(previous.map((_, index) => form.get(`customer-${index}-name`)));
+  previous.forEach((oldName, index) => {
+    const newName = String(form.get(`customer-${index}-name`) || "").trim();
+    if (newName && newName !== oldName) renameCustomerOnOrders(oldName, newName);
+  });
+  state.customers = next;
+}
+
+function readCustomerSettingsForm() {
+  const form = new FormData(els.settingsForm);
+  return normalizeCustomerNames(state.customers.map((_, index) => form.get(`customer-${index}-name`)));
+}
+
+function renameCustomerOnOrders(oldName, newName) {
+  state.orders = state.orders.map((order) => order.customer === oldName ? { ...order, customer: newName } : order);
+  state.expanderOrders = state.expanderOrders.map((order) => order.customer === oldName ? { ...order, customer: newName } : order);
+}
+
 function handleSettingsButton(event, kind) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const { action, index } = button.dataset;
   if (kind === "reactor") {
+    if (action === "remove-customer") {
+      if (!confirm("Remove this customer from the dropdown list? Existing orders will keep their customer name.")) return;
+      applyCustomerSettings();
+      state.customers.splice(Number(index), 1);
+      saveAndRender();
+    }
+    if (action === "add-customer") {
+      const form = new FormData(els.settingsForm);
+      const name = String(form.get("newCustomerName") || "").trim();
+      if (!name) {
+        alert("Enter a customer name.");
+        return;
+      }
+      applyCustomerSettings();
+      state.customers = normalizeCustomerNames([...state.customers, name]);
+      saveAndRender();
+    }
     if (action === "remove-size") {
       if (!confirm("Remove this size from the yield table?")) return;
       state.settings = readSettingsForm();
@@ -1014,7 +1123,7 @@ function readRule(form, kind, index) {
   const machine = form.get(`${prefix}-machine`);
   return {
     customer: form.get(`${prefix}-customer`) || "",
-    productCode: form.get(`${prefix}-productCode`) || "",
+    productCode: "",
     size: form.get(`${prefix}-size`) || "",
     grade: form.get(`${prefix}-grade`) || "",
     color: form.get(`${prefix}-color`) || "",
@@ -1083,15 +1192,13 @@ function abbreviatedEventLabel(event) {
   const customer = abbreviateCustomer(event.customer);
   const size = String(event.size || "").toUpperCase();
   const color = normalizeLabelColor(event.color);
-  return [customer, color, size, `B${event.sequence}`].filter(Boolean).join(" ");
+  return [customer, size, color].filter(Boolean).join(" ");
 }
 
 function abbreviateCustomer(value) {
   const text = String(value || "").trim();
   if (!text) return "Order";
-  const parts = text.split(/\s+/).filter(Boolean);
-  if (parts.length > 1) return parts.map((part) => part.slice(0, 3)).join("-").slice(0, 9);
-  return text.slice(0, 6);
+  return text;
 }
 
 function normalizeLabelColor(value) {
@@ -1115,6 +1222,11 @@ function formatExpanderRange(event) {
 
 function csv(value) {
   return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeCustomerNames(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function saveAndRender() {
@@ -1189,6 +1301,17 @@ function validateReactorOrderQuantity() {
   return validateQuantity(els.orderForm, field, els.fitResult);
 }
 
+function validateCustomerSelection(formEl, resultEl) {
+  const input = formEl.querySelector('[name="customer"]');
+  if (!input || (input.value && input.value !== ADD_CUSTOMER_VALUE)) return true;
+  input.setCustomValidity("Select a customer");
+  input.reportValidity();
+  input.setCustomValidity("");
+  resultEl.textContent = "Select a customer";
+  resultEl.className = "result warn";
+  return false;
+}
+
 function validateQuantity(formEl, name, resultEl) {
   const input = formEl.querySelector(`[name="${name}"]`);
   if (!input || input.disabled) return true;
@@ -1227,7 +1350,7 @@ function normalizeSizeRows(rows, truckBags) {
 function normalizeExclusionRows(rows) {
   return rows.map((row) => ({
     customer: row.customer || "",
-    productCode: row.productCode || row.product || "",
+    productCode: "",
     size: row.size === "" || row.size === undefined || row.size === null ? "" : Number(row.size),
     family: row.family || "",
     grade: row.grade || "",
@@ -1257,7 +1380,7 @@ function normalizeExpanderSizeRows(rows, truckBags) {
 function normalizeExpanderExclusionRows(rows) {
   return rows.map((row) => ({
     customer: row.customer || "",
-    productCode: row.productCode || row.product || "",
+    productCode: "",
     size: row.size ? String(row.size).toUpperCase() : "",
     grade: row.grade || "",
     color: row.color || "",

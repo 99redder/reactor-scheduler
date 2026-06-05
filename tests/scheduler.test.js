@@ -54,7 +54,7 @@ const expander = checkCandidateFit([], {
   id: "x",
   size: 38,
   family: "HBS",
-  productCode: "38X",
+  productCode: "legacy reference ignored",
   quantityBags: 52,
   dueDate: "2026-06-06T12:00"
 }, settings);

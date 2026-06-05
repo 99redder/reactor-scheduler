@@ -50,20 +50,46 @@ function mergeData(base, incoming) {
     sizes: normalizeExpanderSizeRows(incoming.expanderSettings?.sizes || base.expanderSettings.sizes, incoming.expanderSettings?.truckBags || base.expanderSettings.truckBags),
     exclusions: incoming.expanderSettings?.exclusions || base.expanderSettings.exclusions
   };
+  const orders = normalizeOrders(incoming.orders || base.orders);
+  const expanderOrders = normalizeOrders(incoming.expanderOrders || base.expanderOrders);
+  const customers = normalizeCustomers(incoming.customers, orders, expanderOrders);
   return {
     ...base,
     ...incoming,
     settings,
     expanderSettings,
-    orders: incoming.orders || base.orders,
+    orders,
+    customers,
     loadedBatchIds: incoming.loadedBatchIds || base.loadedBatchIds,
-    expanderOrders: incoming.expanderOrders || base.expanderOrders,
+    expanderOrders,
     loadedExpanderBatchIds: incoming.loadedExpanderBatchIds || base.loadedExpanderBatchIds
   };
 }
 
 function normalizeReactors(reactors) {
   return reactors.map((reactor) => reactor.id === "R3" ? { ...reactor, colors: ["black"] } : reactor);
+}
+
+function normalizeOrders(orders) {
+  return orders.map((order) => {
+    const { productCode, product, ...rest } = order;
+    return { ...rest, productCode: "" };
+  });
+}
+
+function normalizeCustomers(customers, orders, expanderOrders) {
+  const values = new Set();
+  if (Array.isArray(customers)) {
+    customers.forEach((customer) => addCustomer(values, customer));
+  } else {
+    [...orders, ...expanderOrders].forEach((order) => addCustomer(values, order.customer));
+  }
+  return [...values].sort((a, b) => a.localeCompare(b));
+}
+
+function addCustomer(values, customer) {
+  const name = String(customer || "").trim();
+  if (name) values.add(name);
 }
 
 function normalizeSizeRows(rows, truckBags) {

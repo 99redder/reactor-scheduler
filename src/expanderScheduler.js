@@ -180,7 +180,6 @@ function isExpanderExcluded(expanderId, order, settings) {
 
 function matchingExpanderExclusions(order, settings) {
   return (settings.exclusions || []).filter((rule) => fieldMatches(rule.customer, order.customer)
-    && fieldMatches(rule.productCode ?? rule.product, order.productCode)
     && fieldMatches(rule.size, order.size)
     && fieldMatches(rule.grade, order.grade || "standard")
     && fieldMatches(rule.color, normalizeColor(order.color)));

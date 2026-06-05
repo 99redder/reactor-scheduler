@@ -15,7 +15,6 @@ export function findYield(settings, size, family) {
 export function isExpanderOrder(order, settings) {
   const row = findYield(settings, order.size, order.family);
   if (typeof order.expanded === "boolean") return order.expanded;
-  if (hasExpandedSuffix(order.productCode)) return true;
   if (typeof row?.expanded === "boolean") return row.expanded;
   if (typeof row?.expanderRoute === "boolean") return row.expanderRoute;
   return false;
@@ -28,7 +27,6 @@ export function hasExpandedSuffix(productCode = "") {
 
 export function defaultExpandedForOrder(order, settings) {
   if (typeof order.expanded === "boolean") return order.expanded;
-  if (hasExpandedSuffix(order.productCode)) return true;
   const row = findYield(settings, order.size, order.family);
   if (typeof row?.expanded === "boolean") return row.expanded;
   return Number(order.size) >= Number(settings.expanderThreshold);
@@ -153,7 +151,6 @@ function eligibleReactorNames(order, settings, options = {}) {
 
 function exclusionMatches(rule, order) {
   return fieldMatches(rule.customer, order.customer)
-    && fieldMatches(rule.productCode ?? rule.product, order.productCode)
     && fieldMatches(rule.size, order.size, true)
     && fieldMatches(rule.family, order.family)
     && fieldMatches(rule.grade, order.grade || "standard")

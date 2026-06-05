@@ -80,6 +80,7 @@ export function defaultData() {
   return {
     settings: defaultSettings(),
     orders: [],
+    customers: [],
     loadedBatchIds: [],
     expanderSettings: defaultExpanderSettings(),
     expanderOrders: [],
