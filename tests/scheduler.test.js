@@ -208,4 +208,32 @@ const skippedSchedule = scheduleOrders([
 assert.equal(skippedSchedule.events.filter((event) => event.orderId === "skip" && event.type === "batch").length, 7);
 assert.equal(skippedSchedule.events.some((event) => event.id === "skip-b1"), false);
 
+// Work-day produce-by math
+import { produceByDate } from "../src/scheduler.js";
+// 5-day week: due Monday → previous work day = Friday (skips Sat, Sun)
+const fiveDaySettings = { ...settings, daysPerWeek: 5 };
+const pbMon5Day = produceByDate("2026-06-08T12:00", fiveDaySettings);
+assert.ok(pbMon5Day.startsWith("2026-06-05"), `5-day week: due Mon → produce by Fri, got ${pbMon5Day}`);
+// 6-day week: due Monday → previous work day = Saturday (skips Sunday only)
+const pbMon6Day = produceByDate("2026-06-08T12:00", settings);
+assert.ok(pbMon6Day.startsWith("2026-06-06"), `6-day week: due Mon → produce by Sat, got ${pbMon6Day}`);
+// 7-day week: due Monday → previous work day = Sunday
+const sevenDaySettings = { ...settings, daysPerWeek: 7, productionLeadDays: 1 };
+const pbMon7Day = produceByDate("2026-06-08T12:00", sevenDaySettings);
+assert.ok(pbMon7Day.startsWith("2026-06-07"), `7-day week: due Mon → produce by Sun, got ${pbMon7Day}`);
+// Wednesday due with 1 day lead in 5-day week → Tuesday
+const pbWed = produceByDate("2026-06-10T12:00", fiveDaySettings);
+assert.ok(pbWed.startsWith("2026-06-09"), `5-day week: due Wed → produce by Tue, got ${pbWed}`);
+
+// 7:10 AM dayStartTime anchor
+import { minutesToDate, dateToScheduleMinute, parseDayStartMinutes } from "../src/scheduler.js";
+assert.equal(parseDayStartMinutes("07:10"), 430);
+const d = minutesToDate("2026-06-01", 0, { dayStartTime: "07:10" });
+assert.equal(d.getHours(), 7);
+assert.equal(d.getMinutes(), 10);
+const min = dateToScheduleMinute("2026-06-01", "2026-06-01T07:10", { dayStartTime: "07:10" });
+assert.equal(min, 0);
+const min2 = dateToScheduleMinute("2026-06-01", "2026-06-01T09:10", { dayStartTime: "07:10" });
+assert.equal(min2, 120);
+
 console.log("scheduler acceptance checks passed");
