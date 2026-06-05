@@ -54,6 +54,7 @@ const BACKUP_META_KEY = "bead-scheduler-backup-meta";
 const BACKUP_REMINDER_DAYS = 7;
 
 setDefaultDueDate();
+setDefaultExpanderOrderForm();
 setDefaultExpanderDueDate();
 syncOrderFormHints();
 render();
@@ -68,6 +69,7 @@ document.querySelectorAll(".tab-btn").forEach((button) => {
 
 els.orderForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!validateReactorOrderQuantity()) return;
   const order = readOrderForm();
   state.orders.push({ ...order, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   saveAndRender();
@@ -77,6 +79,7 @@ els.orderForm.addEventListener("submit", (event) => {
 });
 
 document.querySelector("#checkBtn").addEventListener("click", () => {
+  if (!validateReactorOrderQuantity()) return;
   const candidate = readOrderForm();
   const result = checkCandidateFit(state.orders, candidate, state.settings, state.loadedBatchIds);
   showFitResult(result, els.fitResult);
@@ -85,6 +88,10 @@ document.querySelector("#checkBtn").addEventListener("click", () => {
 els.upsizeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = new FormData(els.upsizeForm);
+  if (Number(form.get("newBags")) < 1) {
+    showQuantityError(els.upsizeResult);
+    return;
+  }
   const result = upsizeCheck(state.orders, form.get("orderId"), Number(form.get("newBags")), state.settings, state.loadedBatchIds);
   if (!result) {
     els.upsizeResult.textContent = "Select an order first.";
@@ -97,14 +104,17 @@ els.upsizeForm.addEventListener("submit", (event) => {
 
 els.expanderOrderForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!validateQuantity(els.expanderOrderForm, "quantity", els.expanderFitResult)) return;
   const order = readExpanderOrderForm();
   state.expanderOrders.push({ ...order, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   saveAndRender();
   els.expanderOrderForm.reset();
+  setDefaultExpanderOrderForm();
   setDefaultExpanderDueDate();
 });
 
 document.querySelector("#expanderCheckBtn").addEventListener("click", () => {
+  if (!validateQuantity(els.expanderOrderForm, "quantity", els.expanderFitResult)) return;
   const result = checkExpanderFit(state.expanderOrders, readExpanderOrderForm(), state.expanderSettings, state.loadedExpanderBatchIds);
   showExpanderFitResult(result, els.expanderFitResult);
 });
@@ -112,6 +122,10 @@ document.querySelector("#expanderCheckBtn").addEventListener("click", () => {
 els.expanderUpsizeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = new FormData(els.expanderUpsizeForm);
+  if (Number(form.get("newQuantity")) < 1) {
+    showQuantityError(els.expanderUpsizeResult);
+    return;
+  }
   const result = upsizeExpanderCheck(state.expanderOrders, form.get("orderId"), Number(form.get("newQuantity")), state.expanderSettings, state.loadedExpanderBatchIds);
   if (!result) {
     els.expanderUpsizeResult.textContent = "Select an order first.";
@@ -186,7 +200,7 @@ els.expanderSettingsForm.addEventListener("click", (event) => {
 els.expanderSettingsForm.addEventListener("input", () => updateRulePreviews("expander"));
 
 els.orderForm.addEventListener("input", (event) => {
-  if (["productCode", "family", "size"].includes(event.target.name)) syncOrderFormHints();
+  if (["family", "size", "orderType"].includes(event.target.name)) syncOrderFormHints();
 });
 
 els.ordersTable.addEventListener("click", (event) => {
@@ -225,12 +239,13 @@ function readOrderForm() {
   const form = new FormData(els.orderForm);
   const size = Number(form.get("size"));
   const family = form.get("family");
+  const orderType = form.get("orderType");
   const truckFillable = isTruckFillable(state.settings, size, family);
-  const trucks = truckFillable ? Number(form.get("trucks") || 0) : 0;
+  const trucks = truckFillable && orderType === "bulk" ? Number(form.get("trucks") || 0) : 0;
   const bags = trucks > 0 ? trucks * Number(state.settings.truckBags) : Number(form.get("quantityBags"));
   return {
     customer: form.get("customer") || "Candidate",
-    productCode: form.get("productCode") || "",
+    productCode: "",
     family,
     size,
     quantityBags: bags,
@@ -248,7 +263,7 @@ function readExpanderOrderForm() {
   const quantity = Number(form.get("quantity"));
   return {
     customer: form.get("customer") || "Candidate",
-    productCode: form.get("productCode") || "",
+    productCode: "",
     size: form.get("size"),
     color: form.get("color"),
     grade: form.get("grade") || "standard",
@@ -344,47 +359,57 @@ function renderExpanderReadout(schedule) {
 function renderTimeline(schedule) {
   const total = schedule.totalMinutes;
   els.timeline.innerHTML = `
-    <div class="axis"><div></div><div class="axis-line">${Array.from({ length: state.settings.daysPerWeek }, (_, i) => `<span>Day ${i + 1}</span>`).join("")}</div></div>
-    ${schedule.reactors.map((reactor) => `
-      <div class="reactor-row">
-        <div class="reactor-name">${reactor.name}</div>
-        <div class="track">
-          ${reactor.windows.map((win) => `<div class="window" style="left:${pos(win.start, total)}%;width:${width(win.start, win.end, total)}%"></div>`).join("")}
-          ${reactor.events.map((event) => eventHtml(event, total)).join("")}
+    <div class="timeline-scroll">
+      <div class="timeline-inner" style="min-width:${state.settings.daysPerWeek * 960}px">
+        <div class="axis"><div></div><div class="axis-line">${Array.from({ length: state.settings.daysPerWeek }, (_, i) => `<span>Day ${i + 1}</span>`).join("")}</div></div>
+        ${schedule.reactors.map((reactor) => `
+          <div class="reactor-row">
+            <div class="reactor-name">${reactor.name}</div>
+            <div class="track">
+              ${reactor.windows.map((win) => `<div class="window" style="left:${pos(win.start, total)}%;width:${width(win.start, win.end, total)}%"></div>`).join("")}
+              ${reactor.events.map((event) => eventHtml(event, total)).join("")}
+            </div>
+          </div>
+        `).join("")}
         </div>
       </div>
-    `).join("")}
   `;
 }
 
 function renderExpanderTimeline(schedule) {
   const total = schedule.totalMinutes;
   els.expanderTimeline.innerHTML = `
-    <div class="axis"><div></div><div class="axis-line">${Array.from({ length: state.expanderSettings.daysPerWeek }, (_, i) => `<span>Day ${i + 1}</span>`).join("")}</div></div>
-    ${schedule.expanders.map((expander) => `
-      <div class="reactor-row">
-        <div class="reactor-name">${expander.id}</div>
-        <div class="track">
-          ${expander.windows.map((win) => `<div class="window" style="left:${pos(win.start, total)}%;width:${width(win.start, win.end, total)}%"></div>`).join("")}
-          ${expander.events.map((event) => expanderEventHtml(event, total)).join("")}
+    <div class="timeline-scroll">
+      <div class="timeline-inner" style="min-width:${state.expanderSettings.daysPerWeek * 960}px">
+        <div class="axis"><div></div><div class="axis-line">${Array.from({ length: state.expanderSettings.daysPerWeek }, (_, i) => `<span>Day ${i + 1}</span>`).join("")}</div></div>
+        ${schedule.expanders.map((expander) => `
+          <div class="reactor-row">
+            <div class="reactor-name">${expander.id}</div>
+            <div class="track">
+              ${expander.windows.map((win) => `<div class="window" style="left:${pos(win.start, total)}%;width:${width(win.start, win.end, total)}%"></div>`).join("")}
+              ${expander.events.map((event) => expanderEventHtml(event, total)).join("")}
+            </div>
+          </div>
+        `).join("")}
         </div>
       </div>
-    `).join("")}
   `;
 }
 
 function eventHtml(event, total) {
   const colorClass = event.type === "changeover" ? "changeover" : event.status === "loaded" ? "loaded" : event.color === "white" ? "white" : "needed";
-  const label = event.type === "changeover"
+  const fullLabel = event.type === "changeover"
     ? event.label
     : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
-  return `<div class="event ${colorClass}" title="${escapeHtml(label)} ${formatRange(event)}" style="left:${pos(event.start, total)}%;width:${Math.max(0.7, width(event.start, event.end, total))}%">${escapeHtml(label)}</div>`;
+  const label = event.type === "changeover" ? event.label : abbreviatedEventLabel(event);
+  return `<div class="event ${colorClass}" title="${escapeAttr(`${fullLabel} ${formatRange(event)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(1.6, width(event.start, event.end, total))}%">${escapeHtml(label)}</div>`;
 }
 
 function expanderEventHtml(event, total) {
   const colorClass = event.type === "color-flip" ? "color-flip" : event.status === "loaded" ? "loaded" : event.color === "white" ? "white" : "needed";
-  const label = event.type === "color-flip" ? event.label : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
-  return `<div class="event ${colorClass}" title="${escapeHtml(label)} ${formatExpanderRange(event)}" style="left:${pos(event.start, total)}%;width:${Math.max(0.7, width(event.start, event.end, total))}%">${escapeHtml(label)}</div>`;
+  const fullLabel = event.type === "color-flip" ? event.label : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
+  const label = event.type === "color-flip" ? event.label : abbreviatedEventLabel(event);
+  return `<div class="event ${colorClass}" title="${escapeAttr(`${fullLabel} ${formatExpanderRange(event)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(1.6, width(event.start, event.end, total))}%">${escapeHtml(label)}</div>`;
 }
 
 function renderOrders(schedule) {
@@ -475,7 +500,7 @@ function renderSettings() {
           <label>Name<input name="reactor-${index}-name" value="${escapeAttr(reactor.name)}"></label>
           <label>Enabled<select name="reactor-${index}-enabled"><option value="true" ${reactor.enabled ? "selected" : ""}>true</option><option value="false" ${!reactor.enabled ? "selected" : ""}>false</option></select></label>
           <label>Staffed Shifts<input name="reactor-${index}-shifts" value="${reactor.staffedShifts.join(",")}"></label>
-          <label>Colors<input name="reactor-${index}-colors" value="${reactor.colors.join(",")}"></label>
+          <label>Colors<input name="reactor-${index}-colors" value="${reactor.id === "R3" ? "black" : escapeAttr(reactor.colors.join(","))}" ${reactor.id === "R3" ? "readonly" : ""}></label>
           <label>Grades<input name="reactor-${index}-grades" value="${reactor.grades.join(",")}"></label>
           <label>Sizes<input name="reactor-${index}-sizes" value="${reactor.sizes.join(",")}"></label>
         </div>
@@ -727,10 +752,9 @@ function renderGuide() {
 
     <details>
       <summary>2. Entering An Order</summary>
-      <p>Enter the customer, product code, size, color, quantity, order type, and due date. Use the preferred machine field only when you want to force a fit check or manual assignment.</p>
+      <p>Enter the customer, size, color, quantity, order type, and due date. Use the preferred machine field only when you want to force a fit check or manual assignment.</p>
       <ul>
         <li><strong>Customer:</strong> used for labels and routing rules like Cambro size-20.</li>
-        <li><strong>Product code:</strong> use X codes like 38X for expanded product.</li>
         <li><strong>Size:</strong> reactor sizes are direct bead sizes; expander sizes are X outputs.</li>
         <li><strong>Color:</strong> white or black. White is capacity-sensitive.</li>
         <li><strong>Quantity:</strong> one truck is currently <strong>${reactor.truckBags}</strong> bags on the reactor side and <strong>${expander.truckBags}</strong> bags on the expander side.</li>
@@ -803,7 +827,7 @@ function readSettingsForm() {
     name: form.get(`reactor-${index}-name`),
     enabled: form.get(`reactor-${index}-enabled`) === "true",
     staffedShifts: csv(form.get(`reactor-${index}-shifts`)).map(Number),
-    colors: csv(form.get(`reactor-${index}-colors`)),
+    colors: reactor.id === "R3" ? ["black"] : csv(form.get(`reactor-${index}-colors`)),
     grades: csv(form.get(`reactor-${index}-grades`)),
     sizes: csv(form.get(`reactor-${index}-sizes`)).map((value) => value === "*" ? value : Number(value))
   }));
@@ -1055,6 +1079,28 @@ function round(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
+function abbreviatedEventLabel(event) {
+  const customer = abbreviateCustomer(event.customer);
+  const size = String(event.size || "").toUpperCase();
+  const color = normalizeLabelColor(event.color);
+  return [customer, color, size, `B${event.sequence}`].filter(Boolean).join(" ");
+}
+
+function abbreviateCustomer(value) {
+  const text = String(value || "").trim();
+  if (!text) return "Order";
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length > 1) return parts.map((part) => part.slice(0, 3)).join("-").slice(0, 9);
+  return text.slice(0, 6);
+}
+
+function normalizeLabelColor(value) {
+  const color = String(value || "").trim().toLowerCase();
+  if (color === "black") return "BK";
+  if (color === "white") return "WH";
+  return color ? color.slice(0, 3).toUpperCase() : "";
+}
+
 function fmt(date) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
@@ -1100,22 +1146,63 @@ function setDefaultExpanderDueDate() {
   input.value = due.toISOString().slice(0, 16);
 }
 
+function setDefaultExpanderOrderForm() {
+  els.expanderOrderForm.querySelector('[name="orderType"]').value = "bulk";
+  els.expanderOrderForm.querySelector('[name="quantity"]').value = "1";
+  els.expanderOrderForm.querySelector('[name="color"]').value = "black";
+}
+
 function syncOrderFormHints() {
   const form = new FormData(els.orderForm);
   const order = {
-    productCode: form.get("productCode") || "",
+    productCode: "",
     family: form.get("family"),
     size: Number(form.get("size")),
     expanded: undefined
   };
   const expandedInput = els.orderForm.querySelector('[name="expanded"]');
   const truckInput = els.orderForm.querySelector('[name="trucks"]');
+  const bagInput = els.orderForm.querySelector('[name="quantityBags"]');
+  const orderTypeInput = els.orderForm.querySelector('[name="orderType"]');
+  const bulkOption = orderTypeInput.querySelector('option[value="bulk"]');
   const trucksField = document.querySelector("#trucksField");
+  const bagQuantityField = document.querySelector("#bagQuantityField");
   expandedInput.checked = defaultExpandedForOrder(order, state.settings);
   const truckFillable = isTruckFillable(state.settings, order.size, order.family);
-  trucksField.classList.toggle("hidden", !truckFillable);
-  truckInput.disabled = !truckFillable;
+  if (!truckFillable && orderTypeInput.value === "bulk") orderTypeInput.value = "bag";
+  bulkOption.disabled = !truckFillable;
+  const isBulk = truckFillable && orderTypeInput.value === "bulk";
+  trucksField.classList.toggle("hidden", !isBulk);
+  bagQuantityField.classList.toggle("hidden", isBulk);
+  truckInput.disabled = !isBulk;
+  bagInput.disabled = isBulk;
+  truckInput.required = isBulk;
+  bagInput.required = !isBulk;
   if (!truckFillable) truckInput.value = "";
+}
+
+function validateReactorOrderQuantity() {
+  syncOrderFormHints();
+  const form = new FormData(els.orderForm);
+  const orderType = form.get("orderType");
+  const field = orderType === "bulk" ? "trucks" : "quantityBags";
+  return validateQuantity(els.orderForm, field, els.fitResult);
+}
+
+function validateQuantity(formEl, name, resultEl) {
+  const input = formEl.querySelector(`[name="${name}"]`);
+  if (!input || input.disabled) return true;
+  if (Number(input.value) >= 1) return true;
+  input.setCustomValidity("Quantity must be at least 1");
+  input.reportValidity();
+  input.setCustomValidity("");
+  showQuantityError(resultEl);
+  return false;
+}
+
+function showQuantityError(resultEl) {
+  resultEl.textContent = "Quantity must be at least 1";
+  resultEl.className = "result warn";
 }
 
 function normalizeSizeRows(rows, truckBags) {

@@ -343,6 +343,15 @@ p {
   box-shadow: var(--shadow);
 }
 
+.timeline-scroll {
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.timeline-inner {
+  min-width: calc(var(--schedule-day-width, 960px) * 6);
+}
+
 .section-head {
   justify-content: space-between;
   margin-bottom: 18px;
@@ -372,9 +381,9 @@ p {
 
 .reactor-row {
   display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: 14px;
-  margin-bottom: 14px;
+  grid-template-columns: 88px 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
   align-items: center;
 }
 
@@ -386,7 +395,7 @@ p {
 
 .track {
   position: relative;
-  height: 66px;
+  height: 92px;
   border: 1px solid var(--line);
   background: repeating-linear-gradient(135deg, #eeeeee 0, #eeeeee 8px, #e3e3e3 8px, #e3e3e3 16px);
   overflow: hidden;
@@ -403,15 +412,15 @@ p {
 
 .event {
   position: absolute;
-  top: 10px;
-  height: 46px;
+  top: 12px;
+  height: 68px;
   border-radius: 0;
   border: 1px solid rgba(0,0,0,.24);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  padding: 7px 8px;
-  font-size: 12px;
+  padding: 21px 12px 10px;
+  font-size: 15px;
   font-weight: 800;
   color: #152016;
   box-shadow: 0 8px 18px rgba(0, 0, 0, .08);
@@ -423,23 +432,25 @@ p {
 .event.changeover {
   background: var(--change);
   color: #fff;
-  top: 21px;
-  height: 24px;
-  padding: 3px 7px;
+  top: 29px;
+  height: 34px;
+  padding: 7px 9px;
+  font-size: 12px;
 }
 
 .event.color-flip {
   background: #222;
   color: #fff;
-  top: 21px;
-  height: 24px;
-  padding: 3px 7px;
+  top: 29px;
+  height: 34px;
+  padding: 7px 9px;
+  font-size: 12px;
 }
 
 .axis {
   display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: 14px;
+  grid-template-columns: 88px 1fr;
+  gap: 16px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;

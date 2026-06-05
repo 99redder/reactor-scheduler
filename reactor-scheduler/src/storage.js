@@ -35,7 +35,7 @@ function mergeData(base, incoming) {
       ...base.settings.changeovers,
       ...((incoming.settings && incoming.settings.changeovers) || {})
     },
-    reactors: incoming.settings?.reactors || base.settings.reactors,
+    reactors: normalizeReactors(incoming.settings?.reactors || base.settings.reactors),
     reactorExclusions: incoming.settings?.reactorExclusions || base.settings.reactorExclusions,
     sizes: normalizeSizeRows(incoming.settings?.sizes || base.settings.sizes, incoming.settings?.truckBags || base.settings.truckBags)
   };
@@ -60,6 +60,10 @@ function mergeData(base, incoming) {
     expanderOrders: incoming.expanderOrders || base.expanderOrders,
     loadedExpanderBatchIds: incoming.loadedExpanderBatchIds || base.loadedExpanderBatchIds
   };
+}
+
+function normalizeReactors(reactors) {
+  return reactors.map((reactor) => reactor.id === "R3" ? { ...reactor, colors: ["black"] } : reactor);
 }
 
 function normalizeSizeRows(rows, truckBags) {

@@ -61,7 +61,7 @@ export function defaultSettings() {
         mergeAdjacentWindows: true,
         sizes: [22],
         grades: ["standard"],
-        colors: ["white"]
+        colors: ["black"]
       }
     ]
   };
