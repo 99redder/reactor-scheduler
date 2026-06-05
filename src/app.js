@@ -52,7 +52,8 @@ const els = {
 
 const BACKUP_META_KEY = "bead-scheduler-backup-meta";
 const BACKUP_REMINDER_DAYS = 7;
-const ADD_CUSTOMER_VALUE = "__add_customer__";
+const ADD_COMPANY_VALUE = "__add_company__";
+const ADD_LOCATION_VALUE = "__add_location__";
 
 setDefaultDueDate();
 setDefaultExpanderOrderForm();
@@ -208,11 +209,11 @@ els.orderForm.addEventListener("input", (event) => {
 });
 
 els.orderForm.addEventListener("change", (event) => {
-  if (event.target.name === "customer") handleCustomerSelect(event.target);
+  if (["company", "location"].includes(event.target.name)) handleCompanyLocationSelect(event.target);
 });
 
 els.expanderOrderForm.addEventListener("change", (event) => {
-  if (event.target.name === "customer") handleCustomerSelect(event.target);
+  if (["company", "location"].includes(event.target.name)) handleCompanyLocationSelect(event.target);
 });
 
 els.ordersTable.addEventListener("click", (event) => {
@@ -255,8 +256,12 @@ function readOrderForm() {
   const truckFillable = isTruckFillable(state.settings, size, family);
   const trucks = truckFillable && orderType === "bulk" ? Number(form.get("trucks") || 0) : 0;
   const bags = trucks > 0 ? trucks * Number(state.settings.truckBags) : Number(form.get("quantityBags"));
+  const company = form.get("company") || "";
+  const location = form.get("location") || "";
   return {
-    customer: form.get("customer") || "Candidate",
+    company,
+    location,
+    customer: customerLabel(company, location) || "Candidate",
     productCode: "",
     family,
     size,
@@ -273,8 +278,12 @@ function readExpanderOrderForm() {
   const form = new FormData(els.expanderOrderForm);
   const orderType = form.get("orderType");
   const quantity = Number(form.get("quantity"));
+  const company = form.get("company") || "";
+  const location = form.get("location") || "";
   return {
-    customer: form.get("customer") || "Candidate",
+    company,
+    location,
+    customer: customerLabel(company, location) || "Candidate",
     productCode: "",
     size: form.get("size"),
     color: form.get("color"),
@@ -290,7 +299,7 @@ function readExpanderOrderForm() {
 function render() {
   const schedule = scheduleOrders(state.orders, state.settings, state.loadedBatchIds);
   const expanderSchedule = scheduleExpanderOrders(state.expanderOrders, state.expanderSettings, state.loadedExpanderBatchIds);
-  renderCustomerSelects();
+  renderCompanyLocationSelects();
   renderReadout(schedule);
   renderTimeline(schedule);
   renderOrders(schedule);
@@ -304,33 +313,68 @@ function render() {
   renderGuide();
 }
 
-function renderCustomerSelects(selectedValue = "", formId = "") {
+function renderCompanyLocationSelects(selected = {}, formId = "") {
   [els.orderForm, els.expanderOrderForm].forEach((form) => {
-    const select = form.querySelector('[name="customer"]');
-    if (!select) return;
-    const current = form.id === formId && selectedValue ? selectedValue : select.value;
-    select.innerHTML = `
-      ${option("", state.customers.length ? "Select customer" : "Add a customer first", !current)}
-      ${state.customers.map((customer) => option(customer, customer, current === customer)).join("")}
-      ${option(ADD_CUSTOMER_VALUE, "+ Add new customer", false)}
+    const companySelect = form.querySelector('[name="company"]');
+    const locationSelect = form.querySelector('[name="location"]');
+    if (!companySelect || !locationSelect) return;
+    const currentCompany = form.id === formId && selected.company ? selected.company : companySelect.value;
+    const company = customerCompany(currentCompany);
+    const currentLocation = form.id === formId && selected.location !== undefined ? selected.location : locationSelect.value;
+    companySelect.innerHTML = `
+      ${option("", state.customers.length ? "Select company" : "Add a company first", !currentCompany)}
+      ${state.customers.map((entry) => option(entry.company, entry.company, currentCompany === entry.company)).join("")}
+      ${option(ADD_COMPANY_VALUE, "+ Add new company", false)}
     `;
+    locationSelect.innerHTML = `
+      ${option("", company ? "Any / no location" : "Select company first", !currentLocation)}
+      ${(company?.locations || []).map((location) => option(location, location, currentLocation === location)).join("")}
+      ${company ? option(ADD_LOCATION_VALUE, "+ Add new location", false) : ""}
+    `;
+    locationSelect.disabled = !company;
   });
 }
 
-function handleCustomerSelect(select) {
-  if (select.value !== ADD_CUSTOMER_VALUE) return;
-  const name = prompt("Customer name");
-  const added = addCustomerName(name);
-  renderCustomerSelects(added, select.closest("form")?.id || "");
+function handleCompanyLocationSelect(select) {
+  const form = select.closest("form");
+  const formId = form?.id || "";
+  const companySelect = form?.querySelector('[name="company"]');
+  const locationSelect = form?.querySelector('[name="location"]');
+  if (select.name === "company" && select.value === ADD_COMPANY_VALUE) {
+    const company = addCompanyName(prompt("Company name"));
+    renderCompanyLocationSelects({ company, location: "" }, formId);
+    return;
+  }
+  if (select.name === "company") {
+    renderCompanyLocationSelects({ company: select.value, location: "" }, formId);
+    return;
+  }
+  if (select.name === "location" && select.value === ADD_LOCATION_VALUE) {
+    const location = addLocationName(companySelect.value, prompt("Location / state"));
+    renderCompanyLocationSelects({ company: companySelect.value, location }, formId);
+    return;
+  }
+  if (locationSelect) locationSelect.setCustomValidity("");
 }
 
-function addCustomerName(value) {
-  const name = String(value || "").trim();
-  if (!name) return "";
-  state.customers = normalizeCustomerNames([...state.customers, name]);
+function addCompanyName(value) {
+  const company = String(value || "").trim();
+  if (!company) return "";
+  state.customers = normalizeCustomerList([...state.customers, { company, locations: [] }]);
   state = dataStore.save(state);
   render();
-  return name;
+  return company;
+}
+
+function addLocationName(company, value) {
+  const location = String(value || "").trim().toUpperCase();
+  if (!company || !location) return "";
+  state.customers = normalizeCustomerList(state.customers.map((entry) => entry.company === company
+    ? { ...entry, locations: [...entry.locations, location] }
+    : entry));
+  state = dataStore.save(state);
+  render();
+  return location;
 }
 
 function renderBackupStatus() {
@@ -616,23 +660,25 @@ function renderCustomerEditor() {
   return `
     <div class="friendly-table-wrap">
       <table class="friendly-table">
-        <thead><tr><th>Customer</th><th></th></tr></thead>
+        <thead><tr><th>Company</th><th>Locations</th><th></th></tr></thead>
         <tbody>
-          ${state.customers.map((customer, index) => `
+          ${state.customers.map((entry, index) => `
             <tr>
-              <td><input name="customer-${index}-name" value="${escapeAttr(customer)}"></td>
-              <td><button class="danger" data-action="remove-customer" data-index="${index}" type="button">Remove</button></td>
+              <td><input name="customer-${index}-company" value="${escapeAttr(entry.company)}"></td>
+              <td><input name="customer-${index}-locations" value="${escapeAttr(entry.locations.join(", "))}" placeholder="OH, MI, KY"></td>
+              <td><button class="danger" data-action="remove-customer" data-index="${index}" type="button">Remove Company</button></td>
             </tr>
-          `).join("") || `<tr><td colspan="2">No customers yet. Add one from an order form or below.</td></tr>`}
+          `).join("") || `<tr><td colspan="3">No companies yet. Add one from an order form or below.</td></tr>`}
         </tbody>
       </table>
     </div>
     <details class="add-form">
-      <summary>Add Customer</summary>
+      <summary>Add Company</summary>
       <div class="settings-row">
-        <label>Customer name<input name="newCustomerName" placeholder="Ventek OH"></label>
+        <label>Company<input name="newCustomerCompany" placeholder="Ventek"></label>
+        <label>Locations<input name="newCustomerLocations" placeholder="OH, MI, KY"></label>
       </div>
-      <button class="secondary" data-action="add-customer" type="button">Add Customer</button>
+      <button class="secondary" data-action="add-customer" type="button">Add Company</button>
     </details>
   `;
 }
@@ -736,8 +782,10 @@ function renderExclusionEditor(rows, machines, kind) {
 function exclusionControls(row, machines, kind, index) {
   const prefix = `${kind}-rule-${index}`;
   const machineValue = row[kind] || machines[0]?.id || "";
+  const company = row.company || row.customer || "";
   return `
-    <label>Customer<select name="${prefix}-customer">${option("", "Any", !row.customer)}${knownOptions("customer", row.customer)}</select></label>
+    <label>Company<select name="${prefix}-company">${option("", "Any", !company)}${companyOptions(company)}</select></label>
+    <label>Location<select name="${prefix}-location">${option("", "Any", !row.location)}${locationOptions(company, row.location)}</select></label>
     <label>Size<select name="${prefix}-size">${option("", "Any", !row.size)}${sizeOptions(kind, row.size)}</select></label>
     <label>Color<select name="${prefix}-color">${option("", "Any", !row.color)}${["black", "white", "green", "yellow"].map((color) => option(color, title(color), row.color === color)).join("")}</select></label>
     <label>Grade<input name="${prefix}-grade" value="${escapeAttr(row.grade || "")}" placeholder="Any"></label>
@@ -765,6 +813,22 @@ function knownOptions(field, selectedValue = "") {
     .join("");
 }
 
+function companyOptions(selectedValue = "") {
+  return state.customers
+    .map((entry) => option(entry.company, entry.company, String(selectedValue || "") === entry.company))
+    .join("");
+}
+
+function locationOptions(company, selectedValue = "") {
+  const entry = customerCompany(company);
+  const values = new Set(company ? entry?.locations || [] : state.customers.flatMap((customer) => customer.locations));
+  if (selectedValue) values.add(String(selectedValue));
+  return [...values]
+    .sort((a, b) => a.localeCompare(b))
+    .map((location) => option(location, location, String(selectedValue || "") === location))
+    .join("");
+}
+
 function sizeOptions(kind, selectedValue = "") {
   const rows = kind === "reactor" ? state.settings.sizes : state.expanderSettings.sizes;
   const values = new Set(rows.map((row) => String(row.size)));
@@ -777,7 +841,8 @@ function sizeOptions(kind, selectedValue = "") {
 
 function exclusionSentence(row, kind) {
   const pieces = [];
-  if (row.customer) pieces.push(row.customer);
+  const company = row.company || row.customer || "";
+  if (company) pieces.push(customerLabel(company, row.location));
   if (row.size) pieces.push(`size-${row.size}`);
   if (row.color) pieces.push(title(row.color));
   if (row.grade) pieces.push(`${row.grade} grade`);
@@ -986,23 +1051,57 @@ function readExpanderSettingsForm() {
 
 function applyCustomerSettings() {
   const form = new FormData(els.settingsForm);
-  const previous = [...state.customers];
-  const next = normalizeCustomerNames(previous.map((_, index) => form.get(`customer-${index}-name`)));
-  previous.forEach((oldName, index) => {
-    const newName = String(form.get(`customer-${index}-name`) || "").trim();
-    if (newName && newName !== oldName) renameCustomerOnOrders(oldName, newName);
+  const previous = structuredClone(state.customers);
+  const next = normalizeCustomerList(previous.map((entry, index) => ({
+    company: form.get(`customer-${index}-company`),
+    locations: csv(form.get(`customer-${index}-locations`)).map((location) => location.toUpperCase())
+  })));
+  previous.forEach((oldEntry, index) => {
+    const newEntry = next[index];
+    if (!newEntry) return;
+    if (newEntry.company !== oldEntry.company) renameCompany(oldEntry.company, newEntry.company);
+    oldEntry.locations.forEach((oldLocation, locationIndex) => {
+      const newLocation = newEntry.locations[locationIndex];
+      if (newLocation && newLocation !== oldLocation) renameLocation(newEntry.company, oldLocation, newLocation);
+    });
   });
   state.customers = next;
 }
 
 function readCustomerSettingsForm() {
   const form = new FormData(els.settingsForm);
-  return normalizeCustomerNames(state.customers.map((_, index) => form.get(`customer-${index}-name`)));
+  return normalizeCustomerList(state.customers.map((_, index) => ({
+    company: form.get(`customer-${index}-company`),
+    locations: csv(form.get(`customer-${index}-locations`)).map((location) => location.toUpperCase())
+  })));
 }
 
-function renameCustomerOnOrders(oldName, newName) {
-  state.orders = state.orders.map((order) => order.customer === oldName ? { ...order, customer: newName } : order);
-  state.expanderOrders = state.expanderOrders.map((order) => order.customer === oldName ? { ...order, customer: newName } : order);
+function renameCompany(oldCompany, newCompany) {
+  const updateOrder = (order) => order.company === oldCompany
+    ? { ...order, company: newCompany, customer: customerLabel(newCompany, order.location) }
+    : order;
+  state.orders = state.orders.map(updateOrder);
+  state.expanderOrders = state.expanderOrders.map(updateOrder);
+  state.settings.reactorExclusions = state.settings.reactorExclusions.map((rule) => (rule.company || rule.customer) === oldCompany
+    ? { ...rule, company: newCompany, customer: newCompany }
+    : rule);
+  state.expanderSettings.exclusions = state.expanderSettings.exclusions.map((rule) => (rule.company || rule.customer) === oldCompany
+    ? { ...rule, company: newCompany, customer: newCompany }
+    : rule);
+}
+
+function renameLocation(company, oldLocation, newLocation) {
+  const updateOrder = (order) => order.company === company && order.location === oldLocation
+    ? { ...order, location: newLocation, customer: customerLabel(company, newLocation) }
+    : order;
+  state.orders = state.orders.map(updateOrder);
+  state.expanderOrders = state.expanderOrders.map(updateOrder);
+  state.settings.reactorExclusions = state.settings.reactorExclusions.map((rule) => (rule.company || rule.customer) === company && rule.location === oldLocation
+    ? { ...rule, location: newLocation }
+    : rule);
+  state.expanderSettings.exclusions = state.expanderSettings.exclusions.map((rule) => (rule.company || rule.customer) === company && rule.location === oldLocation
+    ? { ...rule, location: newLocation }
+    : rule);
 }
 
 function handleSettingsButton(event, kind) {
@@ -1018,13 +1117,16 @@ function handleSettingsButton(event, kind) {
     }
     if (action === "add-customer") {
       const form = new FormData(els.settingsForm);
-      const name = String(form.get("newCustomerName") || "").trim();
-      if (!name) {
-        alert("Enter a customer name.");
+      const company = String(form.get("newCustomerCompany") || "").trim();
+      if (!company) {
+        alert("Enter a company name.");
         return;
       }
       applyCustomerSettings();
-      state.customers = normalizeCustomerNames([...state.customers, name]);
+      state.customers = normalizeCustomerList([...state.customers, {
+        company,
+        locations: csv(form.get("newCustomerLocations")).map((location) => location.toUpperCase())
+      }]);
       saveAndRender();
     }
     if (action === "remove-size") {
@@ -1121,8 +1223,12 @@ function newYieldRow(size, truckFillable, number, colors, truckBags) {
 function readRule(form, kind, index) {
   const prefix = `${kind}-rule-${index}`;
   const machine = form.get(`${prefix}-machine`);
+  const company = form.get(`${prefix}-company`) || "";
+  const location = form.get(`${prefix}-location`) || "";
   return {
-    customer: form.get(`${prefix}-customer`) || "",
+    company,
+    location,
+    customer: company,
     productCode: "",
     size: form.get(`${prefix}-size`) || "",
     grade: form.get(`${prefix}-grade`) || "",
@@ -1189,7 +1295,7 @@ function round(value) {
 }
 
 function abbreviatedEventLabel(event) {
-  const customer = abbreviateCustomer(event.customer);
+  const customer = customerLabel(event.company, event.location) || abbreviateCustomer(event.customer);
   const size = String(event.size || "").toUpperCase();
   const color = normalizeLabelColor(event.color);
   return [customer, size, color].filter(Boolean).join(" ");
@@ -1224,9 +1330,31 @@ function csv(value) {
   return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
 }
 
-function normalizeCustomerNames(values) {
-  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b));
+function normalizeCustomerList(entries) {
+  const byCompany = new Map();
+  entries.forEach((entry) => {
+    const company = String(entry.company || "").trim();
+    if (!company) return;
+    if (!byCompany.has(company)) byCompany.set(company, new Set());
+    (entry.locations || []).forEach((location) => {
+      const value = String(location || "").trim().toUpperCase();
+      if (value) byCompany.get(company).add(value);
+    });
+  });
+  return [...byCompany.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([company, locations]) => ({
+      company,
+      locations: [...locations].sort((a, b) => a.localeCompare(b))
+    }));
+}
+
+function customerCompany(company) {
+  return state.customers.find((entry) => entry.company === company);
+}
+
+function customerLabel(company, location) {
+  return [company, location].filter(Boolean).join(" ");
 }
 
 function saveAndRender() {
@@ -1302,8 +1430,8 @@ function validateReactorOrderQuantity() {
 }
 
 function validateCustomerSelection(formEl, resultEl) {
-  const input = formEl.querySelector('[name="customer"]');
-  if (!input || (input.value && input.value !== ADD_CUSTOMER_VALUE)) return true;
+  const input = formEl.querySelector('[name="company"]');
+  if (!input || (input.value && input.value !== ADD_COMPANY_VALUE)) return true;
   input.setCustomValidity("Select a customer");
   input.reportValidity();
   input.setCustomValidity("");
@@ -1349,7 +1477,9 @@ function normalizeSizeRows(rows, truckBags) {
 
 function normalizeExclusionRows(rows) {
   return rows.map((row) => ({
-    customer: row.customer || "",
+    company: row.company || row.customer || "",
+    location: row.location || "",
+    customer: row.company || row.customer || "",
     productCode: "",
     size: row.size === "" || row.size === undefined || row.size === null ? "" : Number(row.size),
     family: row.family || "",
@@ -1379,7 +1509,9 @@ function normalizeExpanderSizeRows(rows, truckBags) {
 
 function normalizeExpanderExclusionRows(rows) {
   return rows.map((row) => ({
-    customer: row.customer || "",
+    company: row.company || row.customer || "",
+    location: row.location || "",
+    customer: row.company || row.customer || "",
     productCode: "",
     size: row.size ? String(row.size).toUpperCase() : "",
     grade: row.grade || "",

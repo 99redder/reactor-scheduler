@@ -111,6 +111,8 @@ function buildExpanderBatches(orders, settings) {
       orderId: order.id,
       sequence: index + 1,
       customer: order.customer,
+      company: order.company || order.customer,
+      location: order.location || "",
       productCode: order.productCode,
       preferredExpander: order.preferredExpander || "",
       size: String(order.size).toUpperCase(),
@@ -179,7 +181,8 @@ function isExpanderExcluded(expanderId, order, settings) {
 }
 
 function matchingExpanderExclusions(order, settings) {
-  return (settings.exclusions || []).filter((rule) => fieldMatches(rule.customer, order.customer)
+  return (settings.exclusions || []).filter((rule) => fieldMatches(rule.company || rule.customer, order.company || order.customer)
+    && fieldMatches(rule.location, order.location)
     && fieldMatches(rule.size, order.size)
     && fieldMatches(rule.grade, order.grade || "standard")
     && fieldMatches(rule.color, normalizeColor(order.color)));

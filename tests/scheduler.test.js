@@ -105,13 +105,15 @@ assert.equal(allocationSchedule.events.find((event) => event.orderId === "white"
 assert.equal(allocationSchedule.events.find((event) => event.orderId === "black")?.reactorId, "R1");
 
 const cambroSchedule = scheduleOrders([
-  { id: "cambro", customer: "Cambro", size: 20, family: "HBS", quantityBags: 9, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" }
+  { id: "cambro", company: "Cambro", location: "CA", customer: "Cambro CA", size: 20, family: "HBS", quantityBags: 9, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" }
 ], settings);
 assert.equal(cambroSchedule.events.find((event) => event.orderId === "cambro")?.reactorId, "R1");
 
 const cambroR2Fit = checkCandidateFit([], {
   id: "cambro-r2",
-  customer: "Cambro",
+  company: "Cambro",
+  location: "CA",
+  customer: "Cambro CA",
   size: 20,
   family: "HBS",
   quantityBags: 9,
@@ -121,7 +123,40 @@ const cambroR2Fit = checkCandidateFit([], {
   dueDate: "2026-06-08T12:00"
 }, settings);
 assert.equal(cambroR2Fit.status, "blocked");
-assert.match(cambroR2Fit.message, /Cambro size-20 is barred from R2; must schedule on R1/);
+assert.match(cambroR2Fit.message, /Cambro CA size-20 is barred from R2; must schedule on R1/);
+
+const locationSpecificSettings = structuredClone(settings);
+locationSpecificSettings.reactorExclusions = [
+  { company: "Ventek", location: "OH", size: 15, reactor: "R2" }
+];
+const ventekOhR2 = checkCandidateFit([], {
+  id: "ventek-oh-r2",
+  company: "Ventek",
+  location: "OH",
+  customer: "Ventek OH",
+  size: 15,
+  family: "HBS",
+  quantityBags: 9,
+  color: "black",
+  grade: "standard",
+  preferredReactor: "R2",
+  dueDate: "2026-06-08T12:00"
+}, locationSpecificSettings);
+assert.equal(ventekOhR2.status, "blocked");
+const ventekMiR2 = checkCandidateFit([], {
+  id: "ventek-mi-r2",
+  company: "Ventek",
+  location: "MI",
+  customer: "Ventek MI",
+  size: 15,
+  family: "HBS",
+  quantityBags: 9,
+  color: "black",
+  grade: "standard",
+  preferredReactor: "R2",
+  dueDate: "2026-06-08T12:00"
+}, locationSpecificSettings);
+assert.equal(ventekMiR2.status, "scheduled");
 
 const noExclusionSettings = structuredClone(settings);
 noExclusionSettings.reactorExclusions = [];

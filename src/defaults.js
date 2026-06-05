@@ -16,7 +16,7 @@ export function defaultSettings() {
       blackWhiteMinutes: 540
     },
     reactorExclusions: [
-      { customer: "Cambro", productCode: "", size: 20, family: "", grade: "", color: "", reactor: "R2", note: "Cambro size-20 barred from R2" }
+      { company: "Cambro", location: "", customer: "Cambro", size: 20, family: "", grade: "", color: "", reactor: "R2", note: "Cambro size-20 barred from R2" }
     ],
     sizes: [
       { id: "13.5-HBS", size: 13.5, family: "HBS", truckFillable: true, truck_fillable: true, batchesPerTruck: 9, batches_per_truck: 9, bagsPerBatch: 52 / 9, bags_per_batch: 52 / 9, expanded: false, expanderBaseSize: 22 },
@@ -80,7 +80,17 @@ export function defaultData() {
   return {
     settings: defaultSettings(),
     orders: [],
-    customers: [],
+    customers: [
+      { company: "Alleguard", locations: [] },
+      { company: "Cambro", locations: [] },
+      { company: "Cole Tac", locations: [] },
+      { company: "DPC", locations: [] },
+      { company: "EFP", locations: [] },
+      { company: "Polycon", locations: [] },
+      { company: "Schabel Tech", locations: [] },
+      { company: "Sonoco", locations: [] },
+      { company: "Ventek", locations: ["KY", "MI", "OH"] }
+    ],
     loadedBatchIds: [],
     expanderSettings: defaultExpanderSettings(),
     expanderOrders: [],
@@ -131,8 +141,8 @@ export function defaultExpanderSettings() {
       { id: "52X", size: "52X", batchMinutes: 160, batchesPerTruck: 3, bagsPerBatch: 52 / 3, baseInputKg: 550 }
     ],
     exclusions: [
-      { size: "45X", color: "", customer: "", productCode: "", grade: "", expander: "E1", note: "45X cannot run on Expander 1" },
-      { size: "52X", color: "", customer: "", productCode: "", grade: "", expander: "E1", note: "52X cannot run on Expander 1" }
+      { size: "45X", color: "", company: "", location: "", customer: "", grade: "", expander: "E1", note: "45X cannot run on Expander 1" },
+      { size: "52X", color: "", company: "", location: "", customer: "", grade: "", expander: "E1", note: "52X cannot run on Expander 1" }
     ]
   };
 }

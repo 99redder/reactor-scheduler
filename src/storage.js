@@ -73,23 +73,62 @@ function normalizeReactors(reactors) {
 function normalizeOrders(orders) {
   return orders.map((order) => {
     const { productCode, product, ...rest } = order;
-    return { ...rest, productCode: "" };
+    const company = String(order.company || "").trim();
+    const location = String(order.location || "").trim();
+    const parsed = company ? { company, location } : parseCustomerName(order.customer);
+    return {
+      ...rest,
+      company: parsed.company,
+      location: parsed.location,
+      customer: customerLabel(parsed.company, parsed.location),
+      productCode: ""
+    };
   });
 }
 
 function normalizeCustomers(customers, orders, expanderOrders) {
-  const values = new Set();
+  const byCompany = new Map();
   if (Array.isArray(customers)) {
-    customers.forEach((customer) => addCustomer(values, customer));
+    customers.forEach((entry) => addCustomerEntry(byCompany, entry));
   } else {
-    [...orders, ...expanderOrders].forEach((order) => addCustomer(values, order.customer));
+    [...orders, ...expanderOrders].forEach((order) => addCustomerEntry(byCompany, order));
   }
-  return [...values].sort((a, b) => a.localeCompare(b));
+  [...orders, ...expanderOrders].forEach((order) => addCustomerEntry(byCompany, order));
+  return [...byCompany.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([company, locations]) => ({
+      company,
+      locations: [...locations].sort((a, b) => a.localeCompare(b))
+    }));
 }
 
-function addCustomer(values, customer) {
-  const name = String(customer || "").trim();
-  if (name) values.add(name);
+function addCustomerEntry(byCompany, entry) {
+  if (typeof entry === "string") entry = parseCustomerName(entry);
+  const parsed = entry.company ? entry : parseCustomerName(entry.customer);
+  const company = String(parsed.company || "").trim();
+  const location = String(parsed.location || "").trim();
+  if (!company) return;
+  if (!byCompany.has(company)) byCompany.set(company, new Set());
+  (parsed.locations || []).forEach((value) => {
+    const item = String(value || "").trim();
+    if (item) byCompany.get(company).add(item);
+  });
+  if (location) byCompany.get(company).add(location);
+}
+
+function parseCustomerName(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return { company: "", location: "" };
+  const parts = text.split(/\s+/);
+  const last = parts[parts.length - 1] || "";
+  if (/^[A-Z]{2}$/.test(last) && parts.length > 1) {
+    return { company: parts.slice(0, -1).join(" "), location: last };
+  }
+  return { company: text, location: "" };
+}
+
+function customerLabel(company, location) {
+  return [company, location].filter(Boolean).join(" ");
 }
 
 function normalizeSizeRows(rows, truckBags) {

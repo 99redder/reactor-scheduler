@@ -150,7 +150,8 @@ function eligibleReactorNames(order, settings, options = {}) {
 }
 
 function exclusionMatches(rule, order) {
-  return fieldMatches(rule.customer, order.customer)
+  return fieldMatches(rule.company || rule.customer, order.company || order.customer)
+    && fieldMatches(rule.location, order.location)
     && fieldMatches(rule.size, order.size, true)
     && fieldMatches(rule.family, order.family)
     && fieldMatches(rule.grade, order.grade || "standard")
@@ -194,6 +195,8 @@ export function buildBatches(orders, settings) {
       orderId: order.id,
       sequence: index + 1,
       customer: order.customer,
+      company: order.company || order.customer,
+      location: order.location || "",
       productCode: order.productCode,
       preferredReactor: order.preferredReactor || "",
       size: Number(order.size),
