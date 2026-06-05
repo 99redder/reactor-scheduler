@@ -14,6 +14,7 @@ import {
 const settings = defaultSettings();
 const r1 = settings.reactors.find((reactor) => reactor.id === "R1");
 const r2 = settings.reactors.find((reactor) => reactor.id === "R2");
+const r3 = settings.reactors.find((reactor) => reactor.id === "R3");
 
 const r1Capacity = generateStaffedWindows(r1, settings)
   .reduce((sum, win) => sum + Math.floor((win.end - win.start) / settings.batchMinutes), 0);
@@ -22,6 +23,7 @@ const r2Capacity = generateStaffedWindows(r2, settings)
 
 assert.equal(r1Capacity, 48, "R1 should pack 48 batches at defaults");
 assert.equal(r2Capacity, 29, "R2 should lose capacity to dark shift and stranded minutes");
+assert.deepEqual(r3.colors, ["black"], "R3 should be black-only by default");
 
 assert.equal(batchesNeeded({ size: 15, family: "HBS", quantityBags: 52 }, settings), 8);
 assert.equal(batchesNeeded({ size: 24, family: "HBS", quantityBags: 52 }, settings), 5);
