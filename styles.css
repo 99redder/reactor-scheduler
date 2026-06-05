@@ -731,6 +731,38 @@ textarea {
   line-height: 1.45;
 }
 
+/* ── CSV import collapsible ── */
+.csv-import-details {
+  margin-bottom: 12px;
+}
+
+.csv-import-details > summary {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.csv-import-details > summary::before {
+  content: "▸";
+  font-size: 11px;
+  transition: transform .15s ease;
+}
+
+.csv-import-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.csv-import-details .import-bar {
+  margin-top: 8px;
+}
+
 /* ── Screenshot import section ── */
 .screenshot-import-section {
   margin-top: 14px;
