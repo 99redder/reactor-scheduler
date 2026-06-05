@@ -391,7 +391,7 @@ document.querySelector("#screenshotExtractBtn").addEventListener("click", async 
   if (!workerUrl) {
     setScreenshotStatus(
       "Screenshot import service address is not set. " +
-      "Go to Settings and paste the Worker URL into the \"Screenshot import service address\" field. " +
+      "The screenshot service is not reachable. " +
       "You can still use the spreadsheet import or enter orders manually.",
       "warn",
     );

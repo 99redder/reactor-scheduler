@@ -50,23 +50,24 @@
             <label class="file-btn secondary">Import CSV<input id="importReactorCsv" type="file" accept=".csv,text/csv"></label>
             <div id="csvImportResult" class="result"></div>
           </div>
-          <details id="screenshotImportSection" class="screenshot-import-section">
-            <summary>Import from screenshot</summary>
-            <div class="screenshot-import-body">
-              <p class="note">Upload or paste a photo of your logistics schedule. The app reads the orders and shows them for you to review and correct before anything is added — nothing commits until you confirm.</p>
-              <div id="screenshotNoUrlNote" class="result warn hidden">Screenshot import is not set up yet. Go to <strong>Settings → Screenshot import service address</strong> and paste the Worker URL to enable this feature. You can still use the spreadsheet import or enter orders manually.</div>
-              <div class="screenshot-upload-row">
-                <label class="file-btn secondary">Choose image<input id="screenshotFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-                <span class="screenshot-or">or paste (Ctrl+V / ⌘V) with this section open</span>
+          <div id="screenshotImportSection" class="screenshot-import-section">
+            <div class="screenshot-import-header">
+              <div>
+                <div class="screenshot-import-title">📷 Import from Screenshot</div>
+                <div class="screenshot-import-sub">Photo or paste your schedule — review before anything is added</div>
               </div>
-              <div id="screenshotPreviewWrap" class="screenshot-preview-wrap hidden">
-                <img id="screenshotPreviewThumb" class="screenshot-thumb" alt="Uploaded schedule preview">
+              <label class="btn screenshot-upload-btn">Upload Image<input id="screenshotFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+            </div>
+            <div id="screenshotNoUrlNote" class="result warn hidden">Screenshot import is not set up yet.</div>
+            <div id="screenshotPreviewWrap" class="screenshot-preview-wrap hidden">
+              <img id="screenshotPreviewThumb" class="screenshot-thumb" alt="Uploaded schedule preview">
+              <div class="screenshot-preview-actions">
                 <button id="screenshotExtractBtn" type="button">Extract Orders from Image</button>
                 <button id="screenshotClearBtn" class="secondary" type="button">Clear</button>
               </div>
-              <div id="screenshotStatus" class="result"></div>
             </div>
-          </details>
+            <div id="screenshotStatus" class="result"></div>
+          </div>
           <div class="form-grid">
             <label>Company<select name="company" required></select></label>
             <label>Location / State<select name="location"></select></label>
