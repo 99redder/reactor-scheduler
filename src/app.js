@@ -474,7 +474,7 @@ function renderTimeline(schedule) {
   els.timeline.innerHTML = `
     <div class="timeline-scroll">
       <div class="timeline-inner" style="min-width:${state.settings.daysPerWeek * 960}px">
-        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.settings.daysPerWeek}, 1fr)">${dateAxisLabels(state.settings.weekStart, state.settings.daysPerWeek)}</div></div>
+        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.settings.daysPerWeek}, 1fr)">${dateAxisLabels(state.settings.weekStart, state.settings.daysPerWeek, state.settings.dayStartTime)}</div></div>
         ${schedule.reactors.map((reactor) => `
           <div class="reactor-row">
             <div class="reactor-name">${reactor.name}</div>
@@ -494,7 +494,7 @@ function renderExpanderTimeline(schedule) {
   els.expanderTimeline.innerHTML = `
     <div class="timeline-scroll">
       <div class="timeline-inner" style="min-width:${state.expanderSettings.daysPerWeek * 960}px">
-        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.expanderSettings.daysPerWeek}, 1fr)">${dateAxisLabels(state.expanderSettings.weekStart, state.expanderSettings.daysPerWeek)}</div></div>
+        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.expanderSettings.daysPerWeek}, 1fr)">${dateAxisLabels(state.expanderSettings.weekStart, state.expanderSettings.daysPerWeek, state.expanderSettings.dayStartTime)}</div></div>
         ${schedule.expanders.map((expander) => `
           <div class="reactor-row">
             <div class="reactor-name">${expander.id}</div>
@@ -510,6 +510,9 @@ function renderExpanderTimeline(schedule) {
 }
 
 function eventHtml(event, total) {
+  if (event.type === "water-batch") {
+    return `<div class="event water-batch" title="${escapeAttr(`${event.label} — non-production warm-up ${formatRange(event)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(event.label)}</span></div>`;
+  }
   const colorClass = event.type === "changeover" ? "changeover" : event.status === "loaded" ? "loaded" : event.color === "white" ? "white" : "needed";
   const fullLabel = event.type === "changeover"
     ? event.label
@@ -543,7 +546,7 @@ function renderOrders(schedule) {
         ${state.orders.map((order) => {
           const events = byOrder.get(order.id) || [];
           const expander = isExpanderOrder(order, state.settings);
-          const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)))) : expander ? "expanded route" : "not scheduled";
+          const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)), state.settings)) : expander ? "expanded route" : "not scheduled";
           const produceBy = produceByDate(order.dueDate, state.settings);
           return `<tr>
             <td>${escapeHtml(order.customer)}</td>
@@ -569,7 +572,7 @@ function renderExpanderOrders(schedule) {
       <tbody>
         ${state.expanderOrders.map((order) => {
           const events = byOrder.get(order.id) || [];
-          const completion = events.length ? fmt(expanderMinutesToDate(state.expanderSettings.weekStart, Math.max(...events.map((event) => event.end)))) : "not scheduled";
+          const completion = events.length ? fmt(expanderMinutesToDate(state.expanderSettings.weekStart, Math.max(...events.map((event) => event.end)), state.expanderSettings)) : "not scheduled";
           const produceBy = produceByDate(order.dueDate, state.expanderSettings);
           return `<tr>
             <td>${escapeHtml(order.customer)}</td>
@@ -599,12 +602,22 @@ function renderSettings() {
   els.settingsForm.innerHTML = `
     <div class="settings-row">
       ${settingField("Week start", "weekStart", "date", s.weekStart, "First day shown on the weekly schedule.")}
-      ${settingField("Batch time (minutes)", "batchMinutes", "number", s.batchMinutes, "How long one reactor batch takes.")}
-      ${settingField("Days per week", "daysPerWeek", "number", s.daysPerWeek, "How many production days are available.")}
+      ${settingField("Day start time", "dayStartTime", "time", s.dayStartTime || "07:10", "Wall-clock time that schedule minute zero maps to (e.g. 07:10 = 7:10 AM Monday).")}
+      ${settingField("Realistic batches per day", "realisticBatchesPerDay", "number", s.realisticBatchesPerDay ?? 7.5, "Used to compute batch time: minutes per day ÷ this = batch minutes (1440 ÷ 7.5 = 192 min).", "0.1")}
+      ${settingField("Batch time (minutes)", "batchMinutes", "number", s.batchMinutes, "How long one reactor batch takes. Set automatically from realistic batches per day.")}
+      <label>Monday water batch (warm-up)
+        <select name="waterBatch"><option value="true" ${s.waterBatch !== false ? "selected" : ""}>Enabled</option><option value="false" ${s.waterBatch === false ? "selected" : ""}>Disabled</option></select>
+        <span class="field-help">Blocks the first stretch of Monday for all reactors — produces nothing, shown as a non-production block.</span>
+      </label>
+      ${settingField("Water batch duration (minutes)", "waterBatchMinutes", "number", s.waterBatchMinutes ?? 120, "How long the Monday warm-up blocks on each reactor.")}
+      <label>Days per week
+        <select name="daysPerWeek">${[4,5,6,7].map((d) => `<option value="${d}" ${Number(s.daysPerWeek) === d ? "selected" : ""}>${d} days</option>`).join("")}</select>
+        <span class="field-help">Production days available this week. 5 = Mon–Fri, 6 = Mon–Sat, 7 = full week.</span>
+      </label>
       ${settingField("Shift length (minutes)", "shiftLength", "number", s.shiftLength, "Length of one staffed shift.")}
       ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
       ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used only for sizes measured by full truckloads.")}
-      ${settingField("Production lead time (days)", "productionLeadDays", "number", s.productionLeadDays ?? 2, "Batches must finish this many days before delivery.")}
+      ${settingField("Production lead time (work days)", "productionLeadDays", "number", s.productionLeadDays ?? 1, "Batches must finish this many production days before delivery. Skips non-production days.")}
       ${settingField("Auto-mark expanded size", "expanderThreshold", "number", s.expanderThreshold, "Fallback only: sizes at or above this are suggested as expanded unless the X setting says otherwise.")}
       <label>Combine matching orders
         <select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>No</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>Yes</option></select>
@@ -654,7 +667,11 @@ function renderExpanderSettings() {
   els.expanderSettingsForm.innerHTML = `
     <div class="settings-row">
       ${settingField("Week start", "weekStart", "date", s.weekStart, "First day shown on the expander schedule.")}
-      ${settingField("Days per week", "daysPerWeek", "number", s.daysPerWeek, "How many production days are available.")}
+      ${settingField("Day start time", "dayStartTime", "time", s.dayStartTime || "07:10", "Wall-clock time that schedule minute zero maps to.")}
+      <label>Days per week
+        <select name="daysPerWeek">${[4,5,6,7].map((d) => `<option value="${d}" ${Number(s.daysPerWeek) === d ? "selected" : ""}>${d} days</option>`).join("")}</select>
+        <span class="field-help">Production days available this week.</span>
+      </label>
       ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
       ${settingField("Shift length (minutes)", "shiftLength", "number", s.shiftLength, "Length of one staffed shift.")}
       ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used to convert bulk / FTL orders into bag-equivalent quantities.")}
@@ -1027,12 +1044,16 @@ function readSettingsForm() {
   return {
     ...state.settings,
     weekStart: form.get("weekStart"),
+    dayStartTime: form.get("dayStartTime") || "07:10",
     batchMinutes: Number(form.get("batchMinutes")),
+    realisticBatchesPerDay: Number(form.get("realisticBatchesPerDay") || 7.5),
+    waterBatch: form.get("waterBatch") === "true",
+    waterBatchMinutes: Number(form.get("waterBatchMinutes") || 120),
     daysPerWeek: Number(form.get("daysPerWeek")),
     minutesPerDay: Number(form.get("minutesPerDay")),
     shiftLength: Number(form.get("shiftLength")),
     truckBags: Number(form.get("truckBags")),
-    productionLeadDays: Number(form.get("productionLeadDays") || 2),
+    productionLeadDays: Number(form.get("productionLeadDays") || 1),
     expanderThreshold: Number(form.get("expanderThreshold")),
     combineSameSpec: form.get("combineSameSpec") === "true",
     autoColorAllocation: form.get("autoColorAllocation") === "true",
@@ -1073,11 +1094,12 @@ function readExpanderSettingsForm() {
   return {
     ...state.expanderSettings,
     weekStart: form.get("weekStart"),
+    dayStartTime: form.get("dayStartTime") || "07:10",
     daysPerWeek: Number(form.get("daysPerWeek")),
     minutesPerDay: Number(form.get("minutesPerDay")),
     shiftLength: Number(form.get("shiftLength")),
     truckBags,
-    productionLeadDays: Number(form.get("productionLeadDays") || 2),
+    productionLeadDays: Number(form.get("productionLeadDays") || 1),
     efficiency: { ...state.expanderSettings.efficiency, globalPercent: Number(form.get("efficiency")) },
     colorFlipMinutes: Number(form.get("colorFlipMinutes")),
     sizeChangeoverMinutes: Number(form.get("sizeChangeoverMinutes")),
@@ -1298,7 +1320,7 @@ function showFitResult(result, el) {
 
 function fitText(result) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
-  const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(state.settings.weekStart, result.completion));
+  const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(state.settings.weekStart, result.completion, state.settings));
   const reactors = result.reactors?.length ? result.reactors.join(", ") : "none";
   return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, reactor(s) ${reactors}.`;
 }
@@ -1310,7 +1332,7 @@ function showExpanderFitResult(result, el) {
 
 function expanderFitText(result) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
-  const completion = result.completion === null ? "not scheduled" : fmt(expanderMinutesToDate(state.expanderSettings.weekStart, result.completion));
+  const completion = result.completion === null ? "not scheduled" : fmt(expanderMinutesToDate(state.expanderSettings.weekStart, result.completion, state.expanderSettings));
   const expanders = result.expanders?.length ? result.expanders.join(", ") : "none";
   return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, expander(s) ${expanders}.`;
 }
@@ -1368,21 +1390,23 @@ function formatDayLabel(value) {
   return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(value);
 }
 
-function dateAxisLabels(weekStart, days) {
-  const start = new Date(`${weekStart}T00:00:00`);
+function dateAxisLabels(weekStart, days, dayStartTime = "00:00") {
+  const [h, m] = String(dayStartTime || "00:00").split(":").map(Number);
+  const base = new Date(`${weekStart}T00:00:00`);
+  base.setHours(h, m, 0, 0);
   return Array.from({ length: days }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
+    const date = new Date(base);
+    date.setDate(base.getDate() + index);
     return `<span>${escapeHtml(formatDayLabel(date))}</span>`;
   }).join("");
 }
 
 function formatRange(event) {
-  return `${fmt(minutesToDate(state.settings.weekStart, event.start))} - ${fmt(minutesToDate(state.settings.weekStart, event.end))}`;
+  return `${fmt(minutesToDate(state.settings.weekStart, event.start, state.settings))} - ${fmt(minutesToDate(state.settings.weekStart, event.end, state.settings))}`;
 }
 
 function formatExpanderRange(event) {
-  return `${fmt(expanderMinutesToDate(state.expanderSettings.weekStart, event.start))} - ${fmt(expanderMinutesToDate(state.expanderSettings.weekStart, event.end))}`;
+  return `${fmt(expanderMinutesToDate(state.expanderSettings.weekStart, event.start, state.expanderSettings))} - ${fmt(expanderMinutesToDate(state.expanderSettings.weekStart, event.end, state.expanderSettings))}`;
 }
 
 function csv(value) {

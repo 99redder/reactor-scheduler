@@ -28,27 +28,36 @@ export const dataStore = {
 };
 
 function mergeData(base, incoming) {
+  const inSettings = incoming.settings || {};
   const settings = {
     ...base.settings,
-    ...(incoming.settings || {}),
+    ...inSettings,
+    dayStartTime: inSettings.dayStartTime ?? base.settings.dayStartTime,
+    realisticBatchesPerDay: inSettings.realisticBatchesPerDay ?? base.settings.realisticBatchesPerDay,
+    waterBatch: inSettings.waterBatch ?? base.settings.waterBatch,
+    waterBatchMinutes: inSettings.waterBatchMinutes ?? base.settings.waterBatchMinutes,
+    productionLeadDays: inSettings.productionLeadDays ?? base.settings.productionLeadDays,
     changeovers: {
       ...base.settings.changeovers,
       ...((incoming.settings && incoming.settings.changeovers) || {})
     },
-    reactors: normalizeReactors(incoming.settings?.reactors || base.settings.reactors),
-    reactorExclusions: incoming.settings?.reactorExclusions || base.settings.reactorExclusions,
-    sizes: normalizeSizeRows(incoming.settings?.sizes || base.settings.sizes, incoming.settings?.truckBags || base.settings.truckBags)
+    reactors: normalizeReactors(inSettings.reactors || base.settings.reactors),
+    reactorExclusions: inSettings.reactorExclusions || base.settings.reactorExclusions,
+    sizes: normalizeSizeRows(inSettings.sizes || base.settings.sizes, inSettings.truckBags || base.settings.truckBags)
   };
+  const inExpSettings = incoming.expanderSettings || {};
   const expanderSettings = {
     ...base.expanderSettings,
-    ...(incoming.expanderSettings || {}),
+    ...inExpSettings,
+    dayStartTime: inExpSettings.dayStartTime ?? base.expanderSettings.dayStartTime,
+    productionLeadDays: inExpSettings.productionLeadDays ?? base.expanderSettings.productionLeadDays,
     efficiency: {
       ...base.expanderSettings.efficiency,
       ...((incoming.expanderSettings && incoming.expanderSettings.efficiency) || {})
     },
-    expanders: incoming.expanderSettings?.expanders || base.expanderSettings.expanders,
-    sizes: normalizeExpanderSizeRows(incoming.expanderSettings?.sizes || base.expanderSettings.sizes, incoming.expanderSettings?.truckBags || base.expanderSettings.truckBags),
-    exclusions: incoming.expanderSettings?.exclusions || base.expanderSettings.exclusions
+    expanders: inExpSettings.expanders || base.expanderSettings.expanders,
+    sizes: normalizeExpanderSizeRows(inExpSettings.sizes || base.expanderSettings.sizes, inExpSettings.truckBags || base.expanderSettings.truckBags),
+    exclusions: inExpSettings.exclusions || base.expanderSettings.exclusions
   };
   const orders = normalizeOrders(incoming.orders || base.orders);
   const expanderOrders = normalizeOrders(incoming.expanderOrders || base.expanderOrders);

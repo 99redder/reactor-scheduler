@@ -458,6 +458,12 @@ p {
 .event.needed { background: var(--green); }
 .event.white { background: var(--yellow); }
 .event.loaded { background: var(--blue); color: #fff; }
+.event.water-batch {
+  background: repeating-linear-gradient(45deg, #b0b8c4, #b0b8c4 4px, #d4dae2 4px, #d4dae2 8px);
+  color: #333;
+  font-size: 11px;
+  font-style: italic;
+}
 .event.changeover {
   background: var(--change);
   color: #fff;
