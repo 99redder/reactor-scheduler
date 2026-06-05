@@ -109,21 +109,23 @@ const cambroSchedule = scheduleOrders([
 ], settings);
 assert.equal(cambroSchedule.events.find((event) => event.orderId === "cambro")?.reactorId, "R1");
 
-const cambroR2Fit = checkCandidateFit([], {
-  id: "cambro-r2",
-  company: "Cambro",
-  location: "CA",
-  customer: "Cambro CA",
-  size: 20,
-  family: "HBS",
-  quantityBags: 9,
-  color: "black",
-  grade: "standard",
-  preferredReactor: "R2",
-  dueDate: "2026-06-08T12:00"
-}, settings);
-assert.equal(cambroR2Fit.status, "blocked");
-assert.match(cambroR2Fit.message, /Cambro CA size-20 is barred from R2; must schedule on R1/);
+["CA", "TX"].forEach((location) => {
+  const cambroR2Fit = checkCandidateFit([], {
+    id: `cambro-${location.toLowerCase()}-r2`,
+    company: "Cambro",
+    location,
+    customer: `Cambro ${location}`,
+    size: 20,
+    family: "HBS",
+    quantityBags: 9,
+    color: "black",
+    grade: "standard",
+    preferredReactor: "R2",
+    dueDate: "2026-06-08T12:00"
+  }, settings);
+  assert.equal(cambroR2Fit.status, "blocked");
+  assert.match(cambroR2Fit.message, new RegExp(`Cambro ${location} size-20 is barred from R2; must schedule on R1`));
+});
 
 const locationSpecificSettings = structuredClone(settings);
 locationSpecificSettings.reactorExclusions = [
