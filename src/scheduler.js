@@ -187,9 +187,10 @@ export function changeoverMinutes(previous, next, reactor, settings) {
 export function buildBatches(orders, settings) {
   const sorted = [...orders]
     .filter((order) => !isExpanderOrder(order, settings))
-    .sort((a, b) => dueValue(a) - dueValue(b) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    .sort((a, b) => scheduleDateValue(a, settings) - scheduleDateValue(b, settings) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
   return sorted.flatMap((order) => {
     const count = batchesNeeded(order, settings);
+    const produceBy = produceByDate(order.dueDate, settings);
     return Array.from({ length: count }, (_, index) => ({
       id: `${order.id}-b${index + 1}`,
       orderId: order.id,
@@ -204,12 +205,13 @@ export function buildBatches(orders, settings) {
       grade: order.grade || "standard",
       color: normalizeColor(order.color || "green"),
       dueDate: order.dueDate,
+      produceByDate: produceBy,
       minutes: Number(settings.batchMinutes)
     }));
   });
 }
 
-export function scheduleOrders(orders, settings, loadedBatchIds = []) {
+export function scheduleOrders(orders, settings, loadedBatchIds = [], skippedBatchIds = []) {
   const reactors = settings.reactors.filter((reactor) => reactor.enabled && reactor.id !== "R3");
   const reactorStates = Object.fromEntries(reactors.map((reactor) => [reactor.id, {
     reactor,
@@ -218,7 +220,8 @@ export function scheduleOrders(orders, settings, loadedBatchIds = []) {
     priorBatch: null
   }]));
   const unscheduled = [];
-  const batches = orderBatchesForScheduling(buildBatches(orders, settings), settings);
+  const skipped = new Set(skippedBatchIds);
+  const batches = orderBatchesForScheduling(buildBatches(orders, settings).filter((batch) => !skipped.has(batch.id)), settings);
   for (const batch of batches) {
     const candidates = reactors
       .filter((reactor) => reactorCanRun(reactor, batch, settings))
@@ -236,7 +239,7 @@ export function scheduleOrders(orders, settings, loadedBatchIds = []) {
   return summarizeSchedule(reactorStates, unscheduled, settings);
 }
 
-export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchIds = []) {
+export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchIds = [], skippedBatchIds = []) {
   if (isExpanderOrder(candidateOrder, settings)) {
     return {
       status: "expander",
@@ -246,10 +249,11 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
     };
   }
   const candidate = { ...candidateOrder, id: candidateOrder.id || `candidate-${Date.now()}`, createdAt: new Date().toISOString() };
-  const schedule = scheduleOrders([...orders, candidate], settings, loadedBatchIds);
+  const schedule = scheduleOrders([...orders, candidate], settings, loadedBatchIds, skippedBatchIds);
   const candidateEvents = schedule.events.filter((event) => event.orderId === candidate.id && event.type === "batch");
   const completion = candidateEvents.length ? Math.max(...candidateEvents.map((event) => event.end)) : null;
-  const due = candidate.dueDate ? dateToScheduleMinute(settings.weekStart, candidate.dueDate) : Number.MAX_SAFE_INTEGER;
+  const produceBy = produceByDate(candidate.dueDate, settings);
+  const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy) : Number.MAX_SAFE_INTEGER;
   return {
     status: candidateEvents.length ? "scheduled" : "blocked",
     message: candidateEvents.length ? "" : exclusionMessage(candidate, settings),
@@ -257,6 +261,8 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
     minutes: batchesNeeded(candidate, settings) * Number(settings.batchMinutes),
     fits: completion !== null && completion <= due,
     completion,
+    deliveryDate: candidate.dueDate || "",
+    produceByDate: produceBy || "",
     reactors: [...new Set(candidateEvents.map((event) => event.reactorId))],
     schedule
   };
@@ -290,12 +296,12 @@ function candidateScore(candidate, batch, settings) {
   return 0;
 }
 
-export function upsizeCheck(orders, orderId, newBagCount, settings, loadedBatchIds = []) {
+export function upsizeCheck(orders, orderId, newBagCount, settings, loadedBatchIds = [], skippedBatchIds = []) {
   const original = orders.find((order) => order.id === orderId);
   if (!original) return null;
   const oldBatches = batchesNeeded(original, settings);
   const candidate = { ...original, quantityBags: Number(newBagCount) };
-  const result = checkCandidateFit(orders.filter((order) => order.id !== orderId), candidate, settings, loadedBatchIds);
+  const result = checkCandidateFit(orders.filter((order) => order.id !== orderId), candidate, settings, loadedBatchIds, skippedBatchIds);
   return { ...result, oldBatches, incrementalBatches: Math.max(0, batchesNeeded(candidate, settings) - oldBatches) };
 }
 
@@ -391,7 +397,13 @@ function lastEventEnd(events) {
 }
 
 function dueValue(order) {
-  return order.dueDate ? new Date(order.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const date = order.produceByDate || order.dueDate;
+  return date ? new Date(date).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function scheduleDateValue(order, settings) {
+  const date = produceByDate(order.dueDate, settings) || order.produceByDate || order.dueDate;
+  return date ? new Date(date).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
 export function minutesToDate(weekStart, minutes) {
@@ -402,7 +414,19 @@ export function dateToScheduleMinute(weekStart, dateValue) {
   return Math.max(0, Math.round((new Date(dateValue).getTime() - localDateOnly(weekStart).getTime()) / 60000));
 }
 
+export function produceByDate(dueDate, settings = {}) {
+  if (!dueDate) return "";
+  const date = new Date(dueDate);
+  date.setDate(date.getDate() - Number(settings.productionLeadDays ?? 2));
+  return localDateTimeValue(date);
+}
+
 function localDateOnly(value) {
   const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
   return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function localDateTimeValue(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

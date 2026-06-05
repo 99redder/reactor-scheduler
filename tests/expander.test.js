@@ -14,6 +14,7 @@ const totalCapacity = settings.expanders
   .reduce((sum, minutes) => sum + minutes, 0);
 
 assert.equal(totalCapacity, 17280, "two expanders should expose 17,280 min/week before changeovers");
+assert.equal(settings.productionLeadDays, 2, "expander production lead time should default to 2 days");
 
 assert.equal(expanderBatchesNeeded({ size: "30X", orderType: "bulk", quantity: 1 }, settings), 6);
 assert.equal(expanderBatchesNeeded({ size: "38X", orderType: "bulk", quantity: 1 }, settings), 5);
@@ -25,6 +26,8 @@ assert.ok(plannedBatchMinutes(slowSettings, "30X") > plannedBatchMinutes(setting
 const fastFit = checkExpanderFit([], { id: "fast", size: "30X", orderType: "bulk", quantity: 1, color: "black", dueDate: "2026-06-08T12:00" }, settings);
 const slowFit = checkExpanderFit([], { id: "slow", size: "30X", orderType: "bulk", quantity: 1, color: "black", dueDate: "2026-06-08T12:00" }, slowSettings);
 assert.ok(slowFit.completion > fastFit.completion);
+assert.equal(fastFit.deliveryDate, "2026-06-08T12:00");
+assert.equal(fastFit.produceByDate, "2026-06-06T12:00");
 
 const flipSchedule = scheduleExpanderOrders([
   { id: "w1", size: "30X", orderType: "bag", quantity: 9, color: "white", dueDate: "2026-06-08T12:00", createdAt: "1" },
@@ -73,5 +76,11 @@ const warningSchedule = scheduleExpanderOrders([
   { id: "w1", size: "52X", orderType: "bulk", quantity: 10, color: "white", dueDate: "2026-06-08T12:00", createdAt: "1" }
 ], warningSettings);
 assert.equal(warningSchedule.whiteWarning, true);
+
+const skippedSchedule = scheduleExpanderOrders([
+  { id: "skip", size: "30X", orderType: "bulk", quantity: 1, color: "black", dueDate: "2026-06-08T12:00", createdAt: "1" }
+], settings, [], ["skip-eb1"]);
+assert.equal(skippedSchedule.events.filter((event) => event.orderId === "skip" && event.type === "batch").length, 5);
+assert.equal(skippedSchedule.events.some((event) => event.id === "skip-eb1"), false);
 
 console.log("expander acceptance checks passed");

@@ -8,6 +8,7 @@ export function defaultSettings() {
     minutesPerDay: 1440,
     shiftLength: 480,
     truckBags: 52,
+    productionLeadDays: 2,
     expanderThreshold: 30,
     combineSameSpec: false,
     autoColorAllocation: true,
@@ -92,9 +93,11 @@ export function defaultData() {
       { company: "Ventek", locations: ["KY", "MI", "OH"] }
     ],
     loadedBatchIds: [],
+    skippedBatchIds: [],
     expanderSettings: defaultExpanderSettings(),
     expanderOrders: [],
     loadedExpanderBatchIds: [],
+    skippedExpanderBatchIds: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -107,6 +110,7 @@ export function defaultExpanderSettings() {
     minutesPerDay: 1440,
     shiftLength: 480,
     truckBags: 52,
+    productionLeadDays: 2,
     efficiency: { globalPercent: 100, byShift: {} },
     colorFlipMinutes: 420,
     sizeChangeoverMinutes: 0,

@@ -1,4 +1,4 @@
-import { dateToScheduleMinute, minutesToDate, normalizeColor } from "./scheduler.js";
+import { dateToScheduleMinute, minutesToDate, normalizeColor, produceByDate } from "./scheduler.js";
 
 export function generateExpanderWindows(expander, settings) {
   const windows = [];
@@ -42,7 +42,7 @@ export function expanderBatchesNeeded(order, settings) {
   return Math.ceil(bags / perBatch);
 }
 
-export function scheduleExpanderOrders(orders, settings, loadedBatchIds = []) {
+export function scheduleExpanderOrders(orders, settings, loadedBatchIds = [], skippedBatchIds = []) {
   const expanders = settings.expanders.filter((expander) => expander.enabled);
   const states = Object.fromEntries(expanders.map((expander) => [expander.id, {
     expander,
@@ -50,7 +50,8 @@ export function scheduleExpanderOrders(orders, settings, loadedBatchIds = []) {
     events: [],
     currentColor: expander.defaultColor || "black"
   }]));
-  const allBatches = buildExpanderBatches(orders, settings);
+  const skipped = new Set(skippedBatchIds);
+  const allBatches = buildExpanderBatches(orders, settings).filter((batch) => !skipped.has(batch.id));
   const white = allBatches.filter((batch) => normalizeColor(batch.color) === "white").sort(batchSort);
   const black = allBatches.filter((batch) => normalizeColor(batch.color) !== "white").sort(batchSort);
   const unscheduled = [];
@@ -74,28 +75,31 @@ export function scheduleExpanderOrders(orders, settings, loadedBatchIds = []) {
   return summarizeExpanderSchedule(states, unscheduled, settings);
 }
 
-export function checkExpanderFit(orders, candidateOrder, settings, loadedBatchIds = []) {
+export function checkExpanderFit(orders, candidateOrder, settings, loadedBatchIds = [], skippedBatchIds = []) {
   const candidate = { ...candidateOrder, id: candidateOrder.id || `candidate-${Date.now()}`, createdAt: new Date().toISOString() };
-  const schedule = scheduleExpanderOrders([...orders, candidate], settings, loadedBatchIds);
+  const schedule = scheduleExpanderOrders([...orders, candidate], settings, loadedBatchIds, skippedBatchIds);
   const events = schedule.events.filter((event) => event.orderId === candidate.id && event.type === "batch");
   const completion = events.length ? Math.max(...events.map((event) => event.end)) : null;
-  const due = candidate.dueDate ? dateToScheduleMinute(settings.weekStart, candidate.dueDate) : Number.MAX_SAFE_INTEGER;
+  const produceBy = produceByDate(candidate.dueDate, settings);
+  const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy) : Number.MAX_SAFE_INTEGER;
   return {
     status: events.length ? "scheduled" : "blocked",
     message: events.length ? "" : expanderExclusionMessage(candidate, settings),
     batches: expanderBatchesNeeded(candidate, settings),
     fits: completion !== null && completion <= due,
     completion,
+    deliveryDate: candidate.dueDate || "",
+    produceByDate: produceBy || "",
     expanders: [...new Set(events.map((event) => event.expanderId))],
     schedule
   };
 }
 
-export function upsizeExpanderCheck(orders, orderId, newQuantity, settings, loadedBatchIds = []) {
+export function upsizeExpanderCheck(orders, orderId, newQuantity, settings, loadedBatchIds = [], skippedBatchIds = []) {
   const original = orders.find((order) => order.id === orderId);
   if (!original) return null;
   const oldBatches = expanderBatchesNeeded(original, settings);
-  const result = checkExpanderFit(orders.filter((order) => order.id !== orderId), { ...original, quantity: Number(newQuantity), quantityBags: original.orderType === "bulk" ? undefined : Number(newQuantity) }, settings, loadedBatchIds);
+  const result = checkExpanderFit(orders.filter((order) => order.id !== orderId), { ...original, quantity: Number(newQuantity), quantityBags: original.orderType === "bulk" ? undefined : Number(newQuantity) }, settings, loadedBatchIds, skippedBatchIds);
   return { ...result, oldBatches, incrementalBatches: Math.max(0, result.batches - oldBatches) };
 }
 
@@ -104,8 +108,9 @@ function findExpanderSize(settings, size) {
 }
 
 function buildExpanderBatches(orders, settings) {
-  return [...orders].sort(batchSort).flatMap((order) => {
+  return [...orders].sort((a, b) => scheduleDateValue(a, settings) - scheduleDateValue(b, settings) || String(a.createdAt || "").localeCompare(String(b.createdAt || ""))).flatMap((order) => {
     const count = expanderBatchesNeeded(order, settings);
+    const produceBy = produceByDate(order.dueDate, settings);
     return Array.from({ length: count }, (_, index) => ({
       id: `${order.id}-eb${index + 1}`,
       orderId: order.id,
@@ -120,6 +125,7 @@ function buildExpanderBatches(orders, settings) {
       color: normalizeColor(order.color || "black"),
       orderType: order.orderType || "bag",
       dueDate: order.dueDate,
+      produceByDate: produceBy,
       minutes: plannedBatchMinutes(settings, order.size)
     }));
   });
@@ -252,7 +258,13 @@ function batchSort(a, b) {
 }
 
 function dueValue(order) {
-  return order.dueDate ? new Date(order.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const date = order.produceByDate || order.dueDate;
+  return date ? new Date(date).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function scheduleDateValue(order, settings) {
+  const date = produceByDate(order.dueDate, settings) || order.produceByDate || order.dueDate;
+  return date ? new Date(date).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
 function fieldMatches(ruleValue, orderValue) {

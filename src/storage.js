@@ -61,8 +61,10 @@ function mergeData(base, incoming) {
     orders,
     customers,
     loadedBatchIds: incoming.loadedBatchIds || base.loadedBatchIds,
+    skippedBatchIds: incoming.skippedBatchIds || base.skippedBatchIds,
     expanderOrders,
-    loadedExpanderBatchIds: incoming.loadedExpanderBatchIds || base.loadedExpanderBatchIds
+    loadedExpanderBatchIds: incoming.loadedExpanderBatchIds || base.loadedExpanderBatchIds,
+    skippedExpanderBatchIds: incoming.skippedExpanderBatchIds || base.skippedExpanderBatchIds
   };
 }
 
@@ -81,6 +83,7 @@ function normalizeOrders(orders) {
       company: parsed.company,
       location: parsed.location,
       customer: customerLabel(parsed.company, parsed.location),
+      dueDate: rest.dueDate || defaultDueDate(),
       productCode: ""
     };
   });
@@ -129,6 +132,14 @@ function parseCustomerName(value = "") {
 
 function customerLabel(company, location) {
   return [company, location].filter(Boolean).join(" ");
+}
+
+function defaultDueDate() {
+  const due = new Date();
+  due.setDate(due.getDate() + 2);
+  due.setHours(16, 0, 0, 0);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}T${pad(due.getHours())}:${pad(due.getMinutes())}`;
 }
 
 function normalizeSizeRows(rows, truckBags) {

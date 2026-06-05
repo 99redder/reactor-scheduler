@@ -6,6 +6,7 @@ import {
   isExpanderOrder,
   isTruckFillable,
   minutesToDate,
+  produceByDate,
   scheduleOrders,
   upsizeCheck
 } from "./scheduler.js";
@@ -56,6 +57,7 @@ const ADD_COMPANY_VALUE = "__add_company__";
 const ADD_LOCATION_VALUE = "__add_location__";
 
 setDefaultDueDate();
+setDefaultOrderForm();
 setDefaultExpanderOrderForm();
 setDefaultExpanderDueDate();
 syncOrderFormHints();
@@ -76,6 +78,7 @@ els.orderForm.addEventListener("submit", (event) => {
   state.orders.push({ ...order, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   saveAndRender();
   els.orderForm.reset();
+  setDefaultOrderForm();
   setDefaultDueDate();
   syncOrderFormHints();
 });
@@ -84,7 +87,7 @@ document.querySelector("#checkBtn").addEventListener("click", () => {
   if (!validateCustomerSelection(els.orderForm, els.fitResult)) return;
   if (!validateReactorOrderQuantity()) return;
   const candidate = readOrderForm();
-  const result = checkCandidateFit(state.orders, candidate, state.settings, state.loadedBatchIds);
+  const result = checkCandidateFit(state.orders, candidate, state.settings, state.loadedBatchIds, state.skippedBatchIds);
   showFitResult(result, els.fitResult);
 });
 
@@ -95,7 +98,7 @@ els.upsizeForm.addEventListener("submit", (event) => {
     showQuantityError(els.upsizeResult);
     return;
   }
-  const result = upsizeCheck(state.orders, form.get("orderId"), Number(form.get("newBags")), state.settings, state.loadedBatchIds);
+  const result = upsizeCheck(state.orders, form.get("orderId"), Number(form.get("newBags")), state.settings, state.loadedBatchIds, state.skippedBatchIds);
   if (!result) {
     els.upsizeResult.textContent = "Select an order first.";
     els.upsizeResult.className = "result warn";
@@ -119,7 +122,7 @@ els.expanderOrderForm.addEventListener("submit", (event) => {
 document.querySelector("#expanderCheckBtn").addEventListener("click", () => {
   if (!validateCustomerSelection(els.expanderOrderForm, els.expanderFitResult)) return;
   if (!validateQuantity(els.expanderOrderForm, "quantity", els.expanderFitResult)) return;
-  const result = checkExpanderFit(state.expanderOrders, readExpanderOrderForm(), state.expanderSettings, state.loadedExpanderBatchIds);
+  const result = checkExpanderFit(state.expanderOrders, readExpanderOrderForm(), state.expanderSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
   showExpanderFitResult(result, els.expanderFitResult);
 });
 
@@ -130,7 +133,7 @@ els.expanderUpsizeForm.addEventListener("submit", (event) => {
     showQuantityError(els.expanderUpsizeResult);
     return;
   }
-  const result = upsizeExpanderCheck(state.expanderOrders, form.get("orderId"), Number(form.get("newQuantity")), state.expanderSettings, state.loadedExpanderBatchIds);
+  const result = upsizeExpanderCheck(state.expanderOrders, form.get("orderId"), Number(form.get("newQuantity")), state.expanderSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
   if (!result) {
     els.expanderUpsizeResult.textContent = "Select an order first.";
     els.expanderUpsizeResult.className = "result warn";
@@ -204,6 +207,28 @@ els.expanderSettingsForm.addEventListener("click", (event) => {
 
 els.expanderSettingsForm.addEventListener("input", () => updateRulePreviews("expander"));
 
+els.timeline.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action='delete-batch']");
+  if (!button) return;
+  event.stopPropagation();
+  const { batchId } = button.dataset;
+  if (!confirm("Delete this batch from the committed schedule?")) return;
+  state.skippedBatchIds = [...new Set([...(state.skippedBatchIds || []), batchId])];
+  state.loadedBatchIds = state.loadedBatchIds.filter((id) => id !== batchId);
+  saveAndRender();
+});
+
+els.expanderTimeline.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action='delete-expander-batch']");
+  if (!button) return;
+  event.stopPropagation();
+  const { batchId } = button.dataset;
+  if (!confirm("Delete this batch from the committed schedule?")) return;
+  state.skippedExpanderBatchIds = [...new Set([...(state.skippedExpanderBatchIds || []), batchId])];
+  state.loadedExpanderBatchIds = state.loadedExpanderBatchIds.filter((id) => id !== batchId);
+  saveAndRender();
+});
+
 els.orderForm.addEventListener("input", (event) => {
   if (["family", "size", "orderType"].includes(event.target.name)) syncOrderFormHints();
 });
@@ -223,6 +248,7 @@ els.ordersTable.addEventListener("click", (event) => {
   if (action === "delete-order") {
     state.orders = state.orders.filter((order) => order.id !== orderId);
     state.loadedBatchIds = state.loadedBatchIds.filter((id) => !id.startsWith(`${orderId}-`));
+    state.skippedBatchIds = (state.skippedBatchIds || []).filter((id) => !id.startsWith(`${orderId}-`));
   }
   if (action === "toggle-loaded") {
     state.loadedBatchIds = state.loadedBatchIds.includes(batchId)
@@ -239,6 +265,7 @@ els.expanderOrdersTable.addEventListener("click", (event) => {
   if (action === "delete-expander-order") {
     state.expanderOrders = state.expanderOrders.filter((order) => order.id !== orderId);
     state.loadedExpanderBatchIds = state.loadedExpanderBatchIds.filter((id) => !id.startsWith(`${orderId}-`));
+    state.skippedExpanderBatchIds = (state.skippedExpanderBatchIds || []).filter((id) => !id.startsWith(`${orderId}-`));
   }
   if (action === "toggle-expander-loaded") {
     state.loadedExpanderBatchIds = state.loadedExpanderBatchIds.includes(batchId)
@@ -297,8 +324,8 @@ function readExpanderOrderForm() {
 }
 
 function render() {
-  const schedule = scheduleOrders(state.orders, state.settings, state.loadedBatchIds);
-  const expanderSchedule = scheduleExpanderOrders(state.expanderOrders, state.expanderSettings, state.loadedExpanderBatchIds);
+  const schedule = scheduleOrders(state.orders, state.settings, state.loadedBatchIds, state.skippedBatchIds);
+  const expanderSchedule = scheduleExpanderOrders(state.expanderOrders, state.expanderSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
   renderCompanyLocationSelects();
   renderReadout(schedule);
   renderTimeline(schedule);
@@ -447,7 +474,7 @@ function renderTimeline(schedule) {
   els.timeline.innerHTML = `
     <div class="timeline-scroll">
       <div class="timeline-inner" style="min-width:${state.settings.daysPerWeek * 960}px">
-        <div class="axis"><div></div><div class="axis-line">${Array.from({ length: state.settings.daysPerWeek }, (_, i) => `<span>Day ${i + 1}</span>`).join("")}</div></div>
+        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.settings.daysPerWeek}, 1fr)">${dateAxisLabels(state.settings.weekStart, state.settings.daysPerWeek)}</div></div>
         ${schedule.reactors.map((reactor) => `
           <div class="reactor-row">
             <div class="reactor-name">${reactor.name}</div>
@@ -467,7 +494,7 @@ function renderExpanderTimeline(schedule) {
   els.expanderTimeline.innerHTML = `
     <div class="timeline-scroll">
       <div class="timeline-inner" style="min-width:${state.expanderSettings.daysPerWeek * 960}px">
-        <div class="axis"><div></div><div class="axis-line">${Array.from({ length: state.expanderSettings.daysPerWeek }, (_, i) => `<span>Day ${i + 1}</span>`).join("")}</div></div>
+        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.expanderSettings.daysPerWeek}, 1fr)">${dateAxisLabels(state.expanderSettings.weekStart, state.expanderSettings.daysPerWeek)}</div></div>
         ${schedule.expanders.map((expander) => `
           <div class="reactor-row">
             <div class="reactor-name">${expander.id}</div>
@@ -488,14 +515,22 @@ function eventHtml(event, total) {
     ? event.label
     : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
   const label = event.type === "changeover" ? event.label : abbreviatedEventLabel(event);
-  return `<div class="event ${colorClass}" title="${escapeAttr(`${fullLabel} ${formatRange(event)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(1.6, width(event.start, event.end, total))}%">${escapeHtml(label)}</div>`;
+  const title = event.type === "changeover" ? `${fullLabel} ${formatRange(event)}` : `${fullLabel} ${formatRange(event)}. Deliver ${formatDateValue(event.dueDate)}. Produce by ${formatDateValue(event.produceByDate)}.`;
+  const deleteButton = event.type === "batch"
+    ? `<button class="event-delete" data-action="delete-batch" data-batch-id="${escapeAttr(event.id)}" type="button" title="Delete this batch">&times;</button>`
+    : "";
+  return `<div class="event ${colorClass}" title="${escapeAttr(title)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(label)}</span>${deleteButton}</div>`;
 }
 
 function expanderEventHtml(event, total) {
   const colorClass = event.type === "color-flip" ? "color-flip" : event.status === "loaded" ? "loaded" : event.color === "white" ? "white" : "needed";
   const fullLabel = event.type === "color-flip" ? event.label : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
   const label = event.type === "color-flip" ? event.label : abbreviatedEventLabel(event);
-  return `<div class="event ${colorClass}" title="${escapeAttr(`${fullLabel} ${formatExpanderRange(event)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(1.6, width(event.start, event.end, total))}%">${escapeHtml(label)}</div>`;
+  const title = event.type === "color-flip" ? `${fullLabel} ${formatExpanderRange(event)}` : `${fullLabel} ${formatExpanderRange(event)}. Deliver ${formatDateValue(event.dueDate)}. Produce by ${formatDateValue(event.produceByDate)}.`;
+  const deleteButton = event.type === "batch"
+    ? `<button class="event-delete" data-action="delete-expander-batch" data-batch-id="${escapeAttr(event.id)}" type="button" title="Delete this batch">&times;</button>`
+    : "";
+  return `<div class="event ${colorClass}" title="${escapeAttr(title)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(label)}</span>${deleteButton}</div>`;
 }
 
 function renderOrders(schedule) {
@@ -509,12 +544,13 @@ function renderOrders(schedule) {
           const events = byOrder.get(order.id) || [];
           const expander = isExpanderOrder(order, state.settings);
           const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)))) : expander ? "expanded route" : "not scheduled";
+          const produceBy = produceByDate(order.dueDate, state.settings);
           return `<tr>
             <td>${escapeHtml(order.customer)}</td>
             <td>${order.family} ${order.size}${order.expanded ? "X" : ""} ${order.grade} ${order.color}${order.preferredReactor ? ` -> ${order.preferredReactor}` : ""}</td>
             <td>${order.quantityBags}</td>
             <td>${batchesNeeded(order, state.settings)}</td>
-            <td>${completion}</td>
+            <td>${completion}<div class="table-note">Produce by ${escapeHtml(formatDateValue(produceBy))}<br>Deliver ${escapeHtml(formatDateValue(order.dueDate))}</div></td>
             <td>${events.map((event) => `<button class="secondary" data-action="toggle-loaded" data-batch-id="${event.id}" type="button">${event.status === "loaded" ? "Loaded" : `B${event.sequence}`}</button>`).join(" ")}</td>
             <td><button class="danger" data-action="delete-order" data-order-id="${order.id}" type="button">Delete</button></td>
           </tr>`;
@@ -534,12 +570,13 @@ function renderExpanderOrders(schedule) {
         ${state.expanderOrders.map((order) => {
           const events = byOrder.get(order.id) || [];
           const completion = events.length ? fmt(expanderMinutesToDate(state.expanderSettings.weekStart, Math.max(...events.map((event) => event.end)))) : "not scheduled";
+          const produceBy = produceByDate(order.dueDate, state.expanderSettings);
           return `<tr>
             <td>${escapeHtml(order.customer)}</td>
             <td>${order.size} ${order.grade} ${order.color}${order.preferredExpander ? ` -> ${order.preferredExpander}` : ""}</td>
             <td>${order.quantity} ${order.orderType === "bulk" ? "truck(s)" : "bags"}</td>
             <td>${expanderBatchesNeeded(order, state.expanderSettings)}</td>
-            <td>${completion}</td>
+            <td>${completion}<div class="table-note">Produce by ${escapeHtml(formatDateValue(produceBy))}<br>Deliver ${escapeHtml(formatDateValue(order.dueDate))}</div></td>
             <td>${events.map((event) => `<button class="secondary" data-action="toggle-expander-loaded" data-batch-id="${event.id}" type="button">${event.status === "loaded" ? "Loaded" : `B${event.sequence}`}</button>`).join(" ")}</td>
             <td><button class="danger" data-action="delete-expander-order" data-order-id="${order.id}" type="button">Delete</button></td>
           </tr>`;
@@ -567,6 +604,7 @@ function renderSettings() {
       ${settingField("Shift length (minutes)", "shiftLength", "number", s.shiftLength, "Length of one staffed shift.")}
       ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
       ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used only for sizes measured by full truckloads.")}
+      ${settingField("Production lead time (days)", "productionLeadDays", "number", s.productionLeadDays ?? 2, "Batches must finish this many days before delivery.")}
       ${settingField("Auto-mark expanded size", "expanderThreshold", "number", s.expanderThreshold, "Fallback only: sizes at or above this are suggested as expanded unless the X setting says otherwise.")}
       <label>Combine matching orders
         <select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>No</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>Yes</option></select>
@@ -620,6 +658,7 @@ function renderExpanderSettings() {
       ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
       ${settingField("Shift length (minutes)", "shiftLength", "number", s.shiftLength, "Length of one staffed shift.")}
       ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used to convert bulk / FTL orders into bag-equivalent quantities.")}
+      ${settingField("Production lead time (days)", "productionLeadDays", "number", s.productionLeadDays ?? 2, "Batches must finish this many days before delivery.")}
       ${settingField("Efficiency %", "efficiency", "number", s.efficiency.globalPercent, "Lowers or raises planned batch times to match real output.")}
       ${settingField("Color flip time (minutes)", "colorFlipMinutes", "number", s.colorFlipMinutes, "How long Expander 2 loses when switching between black and white.")}
       ${settingField("Size changeover time (minutes)", "sizeChangeoverMinutes", "number", s.sizeChangeoverMinutes, "Optional time added when output size changes.")}
@@ -993,6 +1032,7 @@ function readSettingsForm() {
     minutesPerDay: Number(form.get("minutesPerDay")),
     shiftLength: Number(form.get("shiftLength")),
     truckBags: Number(form.get("truckBags")),
+    productionLeadDays: Number(form.get("productionLeadDays") || 2),
     expanderThreshold: Number(form.get("expanderThreshold")),
     combineSameSpec: form.get("combineSameSpec") === "true",
     autoColorAllocation: form.get("autoColorAllocation") === "true",
@@ -1037,6 +1077,7 @@ function readExpanderSettingsForm() {
     minutesPerDay: Number(form.get("minutesPerDay")),
     shiftLength: Number(form.get("shiftLength")),
     truckBags,
+    productionLeadDays: Number(form.get("productionLeadDays") || 2),
     efficiency: { ...state.expanderSettings.efficiency, globalPercent: Number(form.get("efficiency")) },
     colorFlipMinutes: Number(form.get("colorFlipMinutes")),
     sizeChangeoverMinutes: Number(form.get("sizeChangeoverMinutes")),
@@ -1259,7 +1300,7 @@ function fitText(result) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
   const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(state.settings.weekStart, result.completion));
   const reactors = result.reactors?.length ? result.reactors.join(", ") : "none";
-  return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, reactor(s) ${reactors}.`;
+  return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, reactor(s) ${reactors}.`;
 }
 
 function showExpanderFitResult(result, el) {
@@ -1271,7 +1312,7 @@ function expanderFitText(result) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
   const completion = result.completion === null ? "not scheduled" : fmt(expanderMinutesToDate(state.expanderSettings.weekStart, result.completion));
   const expanders = result.expanders?.length ? result.expanders.join(", ") : "none";
-  return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, expander(s) ${expanders}.`;
+  return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, expander(s) ${expanders}.`;
 }
 
 function readNumber(name) {
@@ -1298,7 +1339,7 @@ function abbreviatedEventLabel(event) {
   const customer = customerLabel(event.company, event.location) || abbreviateCustomer(event.customer);
   const size = String(event.size || "").toUpperCase();
   const color = normalizeLabelColor(event.color);
-  return [customer, size, color].filter(Boolean).join(" ");
+  return [size, customer, color].filter(Boolean).join(" ");
 }
 
 function abbreviateCustomer(value) {
@@ -1316,6 +1357,24 @@ function normalizeLabelColor(value) {
 
 function fmt(date) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function formatDateValue(value) {
+  if (!value) return "not set";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function formatDayLabel(value) {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(value);
+}
+
+function dateAxisLabels(weekStart, days) {
+  const start = new Date(`${weekStart}T00:00:00`);
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return `<span>${escapeHtml(formatDayLabel(date))}</span>`;
+  }).join("");
 }
 
 function formatRange(event) {
@@ -1375,7 +1434,7 @@ function setDefaultDueDate() {
   const due = new Date();
   due.setDate(due.getDate() + 2);
   due.setHours(16, 0, 0, 0);
-  input.value = due.toISOString().slice(0, 16);
+  input.value = localDateTimeValue(due);
 }
 
 function setDefaultExpanderDueDate() {
@@ -1383,7 +1442,19 @@ function setDefaultExpanderDueDate() {
   const due = new Date();
   due.setDate(due.getDate() + 2);
   due.setHours(16, 0, 0, 0);
-  input.value = due.toISOString().slice(0, 16);
+  input.value = localDateTimeValue(due);
+}
+
+function localDateTimeValue(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function setDefaultOrderForm() {
+  els.orderForm.querySelector('[name="orderType"]').value = "bulk";
+  els.orderForm.querySelector('[name="color"]').value = "black";
+  els.orderForm.querySelector('[name="trucks"]').value = "1";
+  els.orderForm.querySelector('[name="quantityBags"]').value = "1";
 }
 
 function setDefaultExpanderOrderForm() {

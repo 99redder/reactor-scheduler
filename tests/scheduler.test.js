@@ -24,6 +24,7 @@ const r2Capacity = generateStaffedWindows(r2, settings)
 assert.equal(r1Capacity, 48, "R1 should pack 48 batches at defaults");
 assert.equal(r2Capacity, 29, "R2 should lose capacity to dark shift and stranded minutes");
 assert.deepEqual(r3.colors, ["black"], "R3 should be black-only by default");
+assert.equal(settings.productionLeadDays, 2, "reactor production lead time should default to 2 days");
 
 assert.equal(batchesNeeded({ size: 15, family: "HBS", quantityBags: 52 }, settings), 8);
 assert.equal(batchesNeeded({ size: 24, family: "HBS", quantityBags: 52 }, settings), 5);
@@ -193,6 +194,14 @@ const fit = checkCandidateFit([], {
 }, settings);
 assert.equal(fit.fits, true);
 assert.equal(fit.batches, 8);
+assert.equal(fit.deliveryDate, "2026-06-08T12:00");
+assert.equal(fit.produceByDate, "2026-06-06T12:00");
 assert.ok(Number.isFinite(fit.completion));
+
+const skippedSchedule = scheduleOrders([
+  { id: "skip", customer: "Skip", size: 15, family: "HBS", quantityBags: 52, color: "black", grade: "standard", dueDate: "2026-06-08T12:00", createdAt: "1" }
+], settings, [], ["skip-b1"]);
+assert.equal(skippedSchedule.events.filter((event) => event.orderId === "skip" && event.type === "batch").length, 7);
+assert.equal(skippedSchedule.events.some((event) => event.id === "skip-b1"), false);
 
 console.log("scheduler acceptance checks passed");
