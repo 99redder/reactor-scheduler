@@ -1142,7 +1142,6 @@ function renderSettings() {
       ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
       ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used only for sizes measured by full truckloads.")}
       ${settingField("Production lead time (work days)", "productionLeadDays", "number", s.productionLeadDays ?? 1, "Batches must finish this many production days before delivery. Skips non-production days.")}
-      ${settingField("Screenshot import service address", "screenshotWorkerUrl", "url", s.screenshotWorkerUrl || "", "Paste the Cloudflare Worker URL here to enable screenshot import. Leave blank to hide the feature. The key stays on the server — never in this app.")}
       ${settingField("Auto-mark expanded size", "expanderThreshold", "number", s.expanderThreshold, "Fallback only: sizes at or above this are suggested as expanded unless the X setting says otherwise.")}
       <label>Combine matching orders
         <select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>No</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>Yes</option></select>
@@ -1579,7 +1578,6 @@ function readSettingsForm() {
     shiftLength: Number(form.get("shiftLength")),
     truckBags: Number(form.get("truckBags")),
     productionLeadDays: Number(form.get("productionLeadDays") || 1),
-    screenshotWorkerUrl: (form.get("screenshotWorkerUrl") || "").trim(),
     expanderThreshold: Number(form.get("expanderThreshold")),
     combineSameSpec: form.get("combineSameSpec") === "true",
     autoColorAllocation: form.get("autoColorAllocation") === "true",
