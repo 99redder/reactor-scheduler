@@ -37,6 +37,7 @@ function mergeData(base, incoming) {
     waterBatch: inSettings.waterBatch ?? base.settings.waterBatch,
     waterBatchMinutes: inSettings.waterBatchMinutes ?? base.settings.waterBatchMinutes,
     productionLeadDays: inSettings.productionLeadDays ?? base.settings.productionLeadDays,
+    screenshotWorkerUrl: inSettings.screenshotWorkerUrl ?? base.settings.screenshotWorkerUrl,
     changeovers: {
       ...base.settings.changeovers,
       ...((incoming.settings && incoming.settings.changeovers) || {})

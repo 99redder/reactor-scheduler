@@ -754,18 +754,6 @@ textarea {
   gap: 12px;
 }
 
-.api-key-row label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.api-key-row input {
-  max-width: 340px;
-}
-
 .screenshot-upload-row {
   display: flex;
   align-items: center;

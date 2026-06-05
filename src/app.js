@@ -1,5 +1,5 @@
 import { dataStore } from "./storage.js";
-import { extractOrdersFromImage, parseExtractedOrders, validateExtractedRow } from "./imageImport.js";
+import { extractViaWorker, parseExtractedOrders, validateExtractedRow } from "./imageImport.js";
 import {
   batchesNeeded,
   checkCandidateFit,
@@ -320,24 +320,23 @@ function parseCsvRow(line) {
 
 const screenshotState = { dataUrl: null, base64: null, mediaType: null };
 
-function screenshotApiKey() {
-  const stored = sessionStorage.getItem("screenshot-api-key") || "";
-  const input = document.querySelector("#screenshotApiKey");
-  const val = input ? input.value.trim() : "";
-  return val || stored;
+function screenshotWorkerUrl() {
+  return (state.settings.screenshotWorkerUrl || "").trim();
 }
 
-document.querySelector("#screenshotApiKey").addEventListener("change", (e) => {
-  const val = e.target.value.trim();
-  if (val) sessionStorage.setItem("screenshot-api-key", val);
-  else sessionStorage.removeItem("screenshot-api-key");
-});
-
-// Pre-fill from session
-(function () {
-  const stored = sessionStorage.getItem("screenshot-api-key");
-  if (stored) document.querySelector("#screenshotApiKey").value = stored;
-})();
+function updateScreenshotAvailability() {
+  const hasUrl = Boolean(screenshotWorkerUrl());
+  const section = document.querySelector("#screenshotImportSection");
+  const wrap = document.querySelector("#screenshotPreviewWrap");
+  const noUrlNote = document.querySelector("#screenshotNoUrlNote");
+  if (!section) return;
+  if (!hasUrl) {
+    if (wrap) wrap.classList.add("hidden");
+    if (noUrlNote) noUrlNote.classList.remove("hidden");
+  } else {
+    if (noUrlNote) noUrlNote.classList.add("hidden");
+  }
+}
 
 function setScreenshotImage(file) {
   if (!file || !file.type.startsWith("image/")) {
@@ -388,17 +387,22 @@ document.querySelector("#screenshotExtractBtn").addEventListener("click", async 
     setScreenshotStatus("No image loaded — upload or paste an image first.", "warn");
     return;
   }
-  const apiKey = screenshotApiKey();
-  if (!apiKey) {
-    setScreenshotStatus("An Anthropic API key is required. Enter it in the field above, then try again. You can get a key at console.anthropic.com.", "warn");
+  const workerUrl = screenshotWorkerUrl();
+  if (!workerUrl) {
+    setScreenshotStatus(
+      "Screenshot import service address is not set. " +
+      "Go to Settings and paste the Worker URL into the \"Screenshot import service address\" field. " +
+      "You can still use the spreadsheet import or enter orders manually.",
+      "warn",
+    );
     return;
   }
   const btn = document.querySelector("#screenshotExtractBtn");
   btn.disabled = true;
   btn.textContent = "Extracting…";
-  setScreenshotStatus("Sending image to Claude — this takes a few seconds…", "");
+  setScreenshotStatus("Sending image to the extraction service — this takes a few seconds…", "");
   try {
-    const rawText = await extractOrdersFromImage(screenshotState.base64, screenshotState.mediaType, apiKey);
+    const rawText = await extractViaWorker(screenshotState.base64, screenshotState.mediaType, workerUrl);
     const { rows, parseError } = parseExtractedOrders(rawText);
     if (parseError) {
       setScreenshotStatus(parseError, "warn");
@@ -830,6 +834,7 @@ function render() {
   const expanderSchedule = scheduleExpanderOrders(weekExpanderOrders, expanderSettings, weekExpanderLoaded, weekExpanderSkipped);
   renderCompanyLocationSelects();
   renderWeekToggle();
+  updateScreenshotAvailability();
   renderReadout(schedule);
   renderTimeline(schedule, settings);
   renderOrders(schedule, settings);
@@ -1137,6 +1142,7 @@ function renderSettings() {
       ${settingField("Minutes per day", "minutesPerDay", "number", s.minutesPerDay, "Total wall-clock minutes in a production day.")}
       ${settingField("Bags per truck", "truckBags", "number", s.truckBags, "Used only for sizes measured by full truckloads.")}
       ${settingField("Production lead time (work days)", "productionLeadDays", "number", s.productionLeadDays ?? 1, "Batches must finish this many production days before delivery. Skips non-production days.")}
+      ${settingField("Screenshot import service address", "screenshotWorkerUrl", "url", s.screenshotWorkerUrl || "", "Paste the Cloudflare Worker URL here to enable screenshot import. Leave blank to hide the feature. The key stays on the server — never in this app.")}
       ${settingField("Auto-mark expanded size", "expanderThreshold", "number", s.expanderThreshold, "Fallback only: sizes at or above this are suggested as expanded unless the X setting says otherwise.")}
       <label>Combine matching orders
         <select name="combineSameSpec"><option value="false" ${!s.combineSameSpec ? "selected" : ""}>No</option><option value="true" ${s.combineSameSpec ? "selected" : ""}>Yes</option></select>
@@ -1573,6 +1579,7 @@ function readSettingsForm() {
     shiftLength: Number(form.get("shiftLength")),
     truckBags: Number(form.get("truckBags")),
     productionLeadDays: Number(form.get("productionLeadDays") || 1),
+    screenshotWorkerUrl: (form.get("screenshotWorkerUrl") || "").trim(),
     expanderThreshold: Number(form.get("expanderThreshold")),
     combineSameSpec: form.get("combineSameSpec") === "true",
     autoColorAllocation: form.get("autoColorAllocation") === "true",

@@ -53,13 +53,8 @@
           <details id="screenshotImportSection" class="screenshot-import-section">
             <summary>Import from screenshot</summary>
             <div class="screenshot-import-body">
-              <p class="note">Upload or paste a photo of your logistics schedule. The app will read the orders and show them for you to review and confirm — nothing is added until you approve.</p>
-              <div class="api-key-row">
-                <label>Anthropic API key (required for vision)
-                  <input id="screenshotApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
-                </label>
-                <span class="field-help">Stored in this browser tab only — never saved to your backup file.</span>
-              </div>
+              <p class="note">Upload or paste a photo of your logistics schedule. The app reads the orders and shows them for you to review and correct before anything is added — nothing commits until you confirm.</p>
+              <div id="screenshotNoUrlNote" class="result warn hidden">Screenshot import is not set up yet. Go to <strong>Settings → Screenshot import service address</strong> and paste the Worker URL to enable this feature. You can still use the spreadsheet import or enter orders manually.</div>
               <div class="screenshot-upload-row">
                 <label class="file-btn secondary">Choose image<input id="screenshotFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
                 <span class="screenshot-or">or paste (Ctrl+V / ⌘V) with this section open</span>

@@ -13,6 +13,7 @@ export function defaultSettings() {
     shiftLength: 480,
     truckBags: 52,
     productionLeadDays: 1,
+    screenshotWorkerUrl: "",
     expanderThreshold: 30,
     combineSameSpec: false,
     autoColorAllocation: true,
