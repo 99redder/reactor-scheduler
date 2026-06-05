@@ -83,6 +83,7 @@ function defaultWeekStart() {
 
 export function defaultData() {
   return {
+    viewWeek: "this",
     settings: defaultSettings(),
     orders: [],
     customers: [

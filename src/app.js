@@ -21,6 +21,38 @@ import {
 let state = dataStore.load();
 let pendingRestoreText = null;
 
+function nextWeekStart(weekStart) {
+  const d = new Date(`${weekStart}T00:00:00`);
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function activeWeekStart() {
+  return state.viewWeek === "next" ? nextWeekStart(state.settings.weekStart) : state.settings.weekStart;
+}
+
+function activeExpanderWeekStart() {
+  return state.viewWeek === "next" ? nextWeekStart(state.expanderSettings.weekStart) : state.expanderSettings.weekStart;
+}
+
+function activeSettings() {
+  const ws = activeWeekStart();
+  return ws !== state.settings.weekStart ? { ...state.settings, weekStart: ws } : state.settings;
+}
+
+function activeExpanderSettings() {
+  const ws = activeExpanderWeekStart();
+  return ws !== state.expanderSettings.weekStart ? { ...state.expanderSettings, weekStart: ws } : state.expanderSettings;
+}
+
+function ordersForWeek(orders, week) {
+  return orders.filter((order) => (order.week || "this") === week);
+}
+
+function expanderOrdersForWeek(orders, week) {
+  return orders.filter((order) => (order.week || "this") === week);
+}
+
 const els = {
   orderForm: document.querySelector("#orderForm"),
   upsizeForm: document.querySelector("#upsizeForm"),
@@ -64,18 +96,27 @@ syncOrderFormHints();
 render();
 renderBackupStatus();
 
-document.querySelectorAll(".tab-btn").forEach((button) => {
+document.querySelectorAll(".tab-btn[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("active", btn === button));
+    document.querySelectorAll(".tab-btn[data-view]").forEach((btn) => btn.classList.toggle("active", btn === button));
+    document.querySelectorAll(".tab-btn[data-view]").forEach((btn) => btn.classList.toggle("secondary", btn !== button));
     document.querySelectorAll(".app-view").forEach((view) => view.classList.toggle("active-view", view.id === button.dataset.view));
   });
+});
+
+document.querySelector("#weekToggle").addEventListener("click", (event) => {
+  const btn = event.target.closest("button[data-week]");
+  if (!btn) return;
+  state.viewWeek = btn.dataset.week;
+  state = dataStore.save(state);
+  render();
 });
 
 els.orderForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!validateReactorOrderQuantity()) return;
   const order = readOrderForm();
-  state.orders.push({ ...order, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
+  state.orders.push({ ...order, week: state.viewWeek || "this", id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   saveAndRender();
   els.orderForm.reset();
   setDefaultOrderForm();
@@ -87,8 +128,11 @@ document.querySelector("#checkBtn").addEventListener("click", () => {
   if (!validateCustomerSelection(els.orderForm, els.fitResult)) return;
   if (!validateReactorOrderQuantity()) return;
   const candidate = readOrderForm();
-  const result = checkCandidateFit(state.orders, candidate, state.settings, state.loadedBatchIds, state.skippedBatchIds);
-  showFitResult(result, els.fitResult);
+  const week = state.viewWeek || "this";
+  const settings = activeSettings();
+  const weekOrders = ordersForWeek(state.orders, week);
+  const result = checkCandidateFit(weekOrders, candidate, settings, state.loadedBatchIds, state.skippedBatchIds);
+  showFitResult(result, els.fitResult, settings);
 });
 
 els.upsizeForm.addEventListener("submit", (event) => {
@@ -98,13 +142,15 @@ els.upsizeForm.addEventListener("submit", (event) => {
     showQuantityError(els.upsizeResult);
     return;
   }
-  const result = upsizeCheck(state.orders, form.get("orderId"), Number(form.get("newBags")), state.settings, state.loadedBatchIds, state.skippedBatchIds);
+  const settings = activeSettings();
+  const weekOrders = ordersForWeek(state.orders, state.viewWeek || "this");
+  const result = upsizeCheck(weekOrders, form.get("orderId"), Number(form.get("newBags")), settings, state.loadedBatchIds, state.skippedBatchIds);
   if (!result) {
     els.upsizeResult.textContent = "Select an order first.";
     els.upsizeResult.className = "result warn";
     return;
   }
-  els.upsizeResult.textContent = `Incremental batches: ${result.incrementalBatches}. ${fitText(result)}`;
+  els.upsizeResult.textContent = `Incremental batches: ${result.incrementalBatches}. ${fitText(result, settings)}`;
   els.upsizeResult.className = `result ${result.fits ? "ok" : "warn"}`;
 });
 
@@ -112,7 +158,7 @@ els.expanderOrderForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!validateQuantity(els.expanderOrderForm, "quantity", els.expanderFitResult)) return;
   const order = readExpanderOrderForm();
-  state.expanderOrders.push({ ...order, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
+  state.expanderOrders.push({ ...order, week: state.viewWeek || "this", id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   saveAndRender();
   els.expanderOrderForm.reset();
   setDefaultExpanderOrderForm();
@@ -122,8 +168,11 @@ els.expanderOrderForm.addEventListener("submit", (event) => {
 document.querySelector("#expanderCheckBtn").addEventListener("click", () => {
   if (!validateCustomerSelection(els.expanderOrderForm, els.expanderFitResult)) return;
   if (!validateQuantity(els.expanderOrderForm, "quantity", els.expanderFitResult)) return;
-  const result = checkExpanderFit(state.expanderOrders, readExpanderOrderForm(), state.expanderSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
-  showExpanderFitResult(result, els.expanderFitResult);
+  const week = state.viewWeek || "this";
+  const expSettings = activeExpanderSettings();
+  const weekExpanderOrders = expanderOrdersForWeek(state.expanderOrders, week);
+  const result = checkExpanderFit(weekExpanderOrders, readExpanderOrderForm(), expSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
+  showExpanderFitResult(result, els.expanderFitResult, expSettings);
 });
 
 els.expanderUpsizeForm.addEventListener("submit", (event) => {
@@ -133,13 +182,15 @@ els.expanderUpsizeForm.addEventListener("submit", (event) => {
     showQuantityError(els.expanderUpsizeResult);
     return;
   }
-  const result = upsizeExpanderCheck(state.expanderOrders, form.get("orderId"), Number(form.get("newQuantity")), state.expanderSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
+  const expSettings = activeExpanderSettings();
+  const weekExpanderOrders = expanderOrdersForWeek(state.expanderOrders, state.viewWeek || "this");
+  const result = upsizeExpanderCheck(weekExpanderOrders, form.get("orderId"), Number(form.get("newQuantity")), expSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
   if (!result) {
     els.expanderUpsizeResult.textContent = "Select an order first.";
     els.expanderUpsizeResult.className = "result warn";
     return;
   }
-  els.expanderUpsizeResult.textContent = `Incremental batches: ${result.incrementalBatches}. ${expanderFitText(result)}`;
+  els.expanderUpsizeResult.textContent = `Incremental batches: ${result.incrementalBatches}. ${expanderFitText(result, expSettings)}`;
   els.expanderUpsizeResult.className = `result ${result.fits ? "ok" : "warn"}`;
 });
 
@@ -324,20 +375,38 @@ function readExpanderOrderForm() {
 }
 
 function render() {
-  const schedule = scheduleOrders(state.orders, state.settings, state.loadedBatchIds, state.skippedBatchIds);
-  const expanderSchedule = scheduleExpanderOrders(state.expanderOrders, state.expanderSettings, state.loadedExpanderBatchIds, state.skippedExpanderBatchIds);
+  const week = state.viewWeek || "this";
+  const settings = activeSettings();
+  const expanderSettings = activeExpanderSettings();
+  const weekOrders = ordersForWeek(state.orders, week);
+  const weekExpanderOrders = expanderOrdersForWeek(state.expanderOrders, week);
+  const weekLoaded = state.loadedBatchIds.filter((id) => weekOrders.some((o) => id.startsWith(`${o.id}-`)));
+  const weekSkipped = (state.skippedBatchIds || []).filter((id) => weekOrders.some((o) => id.startsWith(`${o.id}-`)));
+  const weekExpanderLoaded = state.loadedExpanderBatchIds.filter((id) => weekExpanderOrders.some((o) => id.startsWith(`${o.id}-`)));
+  const weekExpanderSkipped = (state.skippedExpanderBatchIds || []).filter((id) => weekExpanderOrders.some((o) => id.startsWith(`${o.id}-`)));
+  const schedule = scheduleOrders(weekOrders, settings, weekLoaded, weekSkipped);
+  const expanderSchedule = scheduleExpanderOrders(weekExpanderOrders, expanderSettings, weekExpanderLoaded, weekExpanderSkipped);
   renderCompanyLocationSelects();
+  renderWeekToggle();
   renderReadout(schedule);
-  renderTimeline(schedule);
-  renderOrders(schedule);
+  renderTimeline(schedule, settings);
+  renderOrders(schedule, settings);
   renderSettings();
   renderUpsizeOptions();
   renderExpanderReadout(expanderSchedule);
-  renderExpanderTimeline(expanderSchedule);
-  renderExpanderOrders(expanderSchedule);
+  renderExpanderTimeline(expanderSchedule, expanderSettings);
+  renderExpanderOrders(expanderSchedule, expanderSettings);
   renderExpanderSettings();
   renderExpanderUpsizeOptions();
   renderGuide();
+}
+
+function renderWeekToggle() {
+  const week = state.viewWeek || "this";
+  document.querySelectorAll("#weekToggle .tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.week === week);
+    btn.classList.toggle("secondary", btn.dataset.week !== week);
+  });
 }
 
 function renderCompanyLocationSelects(selected = {}, formId = "") {
@@ -469,18 +538,18 @@ function renderExpanderReadout(schedule) {
   `;
 }
 
-function renderTimeline(schedule) {
+function renderTimeline(schedule, settings = state.settings) {
   const total = schedule.totalMinutes;
   els.timeline.innerHTML = `
     <div class="timeline-scroll">
-      <div class="timeline-inner" style="min-width:${state.settings.daysPerWeek * 960}px">
-        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.settings.daysPerWeek}, 1fr)">${dateAxisLabels(state.settings.weekStart, state.settings.daysPerWeek, state.settings.dayStartTime)}</div></div>
+      <div class="timeline-inner" style="min-width:${settings.daysPerWeek * 960}px">
+        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${settings.daysPerWeek}, 1fr)">${dateAxisLabels(settings.weekStart, settings.daysPerWeek, settings.dayStartTime)}</div></div>
         ${schedule.reactors.map((reactor) => `
           <div class="reactor-row">
             <div class="reactor-name">${reactor.name}</div>
             <div class="track">
               ${reactor.windows.map((win) => `<div class="window" style="left:${pos(win.start, total)}%;width:${width(win.start, win.end, total)}%"></div>`).join("")}
-              ${reactor.events.map((event) => eventHtml(event, total)).join("")}
+              ${reactor.events.map((event) => eventHtml(event, total, settings)).join("")}
             </div>
           </div>
         `).join("")}
@@ -489,18 +558,18 @@ function renderTimeline(schedule) {
   `;
 }
 
-function renderExpanderTimeline(schedule) {
+function renderExpanderTimeline(schedule, settings = state.expanderSettings) {
   const total = schedule.totalMinutes;
   els.expanderTimeline.innerHTML = `
     <div class="timeline-scroll">
-      <div class="timeline-inner" style="min-width:${state.expanderSettings.daysPerWeek * 960}px">
-        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${state.expanderSettings.daysPerWeek}, 1fr)">${dateAxisLabels(state.expanderSettings.weekStart, state.expanderSettings.daysPerWeek, state.expanderSettings.dayStartTime)}</div></div>
+      <div class="timeline-inner" style="min-width:${settings.daysPerWeek * 960}px">
+        <div class="axis"><div></div><div class="axis-line" style="grid-template-columns:repeat(${settings.daysPerWeek}, 1fr)">${dateAxisLabels(settings.weekStart, settings.daysPerWeek, settings.dayStartTime)}</div></div>
         ${schedule.expanders.map((expander) => `
           <div class="reactor-row">
             <div class="reactor-name">${expander.id}</div>
             <div class="track">
               ${expander.windows.map((win) => `<div class="window" style="left:${pos(win.start, total)}%;width:${width(win.start, win.end, total)}%"></div>`).join("")}
-              ${expander.events.map((event) => expanderEventHtml(event, total)).join("")}
+              ${expander.events.map((event) => expanderEventHtml(event, total, settings)).join("")}
             </div>
           </div>
         `).join("")}
@@ -509,92 +578,100 @@ function renderExpanderTimeline(schedule) {
   `;
 }
 
-function eventHtml(event, total) {
+function eventHtml(event, total, settings = state.settings) {
   if (event.type === "water-batch") {
-    return `<div class="event water-batch" title="${escapeAttr(`${event.label} — non-production warm-up ${formatRange(event)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(event.label)}</span></div>`;
+    return `<div class="event water-batch" title="${escapeAttr(`${event.label} — non-production warm-up ${formatRange(event, settings)}`)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(event.label)}</span></div>`;
   }
   const colorClass = event.type === "changeover" ? "changeover" : event.status === "loaded" ? "loaded" : event.color === "white" ? "white" : "needed";
   const fullLabel = event.type === "changeover"
     ? event.label
     : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
   const label = event.type === "changeover" ? event.label : abbreviatedEventLabel(event);
-  const title = event.type === "changeover" ? `${fullLabel} ${formatRange(event)}` : `${fullLabel} ${formatRange(event)}. Deliver ${formatDateValue(event.dueDate)}. Produce by ${formatDateValue(event.produceByDate)}.`;
+  const title = event.type === "changeover" ? `${fullLabel} ${formatRange(event, settings)}` : `${fullLabel} ${formatRange(event, settings)}. Deliver ${formatDateValue(event.dueDate)}. Produce by ${formatDateValue(event.produceByDate)}.`;
   const deleteButton = event.type === "batch"
     ? `<button class="event-delete" data-action="delete-batch" data-batch-id="${escapeAttr(event.id)}" type="button" title="Delete this batch">&times;</button>`
     : "";
   return `<div class="event ${colorClass}" title="${escapeAttr(title)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(label)}</span>${deleteButton}</div>`;
 }
 
-function expanderEventHtml(event, total) {
+function expanderEventHtml(event, total, settings = state.expanderSettings) {
   const colorClass = event.type === "color-flip" ? "color-flip" : event.status === "loaded" ? "loaded" : event.color === "white" ? "white" : "needed";
   const fullLabel = event.type === "color-flip" ? event.label : `${event.customer || ""} ${event.size} ${event.color} b${event.sequence}`;
   const label = event.type === "color-flip" ? event.label : abbreviatedEventLabel(event);
-  const title = event.type === "color-flip" ? `${fullLabel} ${formatExpanderRange(event)}` : `${fullLabel} ${formatExpanderRange(event)}. Deliver ${formatDateValue(event.dueDate)}. Produce by ${formatDateValue(event.produceByDate)}.`;
+  const title = event.type === "color-flip" ? `${fullLabel} ${formatExpanderRange(event, settings)}` : `${fullLabel} ${formatExpanderRange(event, settings)}. Deliver ${formatDateValue(event.dueDate)}. Produce by ${formatDateValue(event.produceByDate)}.`;
   const deleteButton = event.type === "batch"
     ? `<button class="event-delete" data-action="delete-expander-batch" data-batch-id="${escapeAttr(event.id)}" type="button" title="Delete this batch">&times;</button>`
     : "";
   return `<div class="event ${colorClass}" title="${escapeAttr(title)}" style="left:${pos(event.start, total)}%;width:${Math.max(2.2, width(event.start, event.end, total))}%"><span>${escapeHtml(label)}</span>${deleteButton}</div>`;
 }
 
-function renderOrders(schedule) {
+function renderOrders(schedule, settings = state.settings) {
+  const week = state.viewWeek || "this";
+  const weekOrders = ordersForWeek(state.orders, week);
   const byOrder = new Map(schedule.events.filter((event) => event.type === "batch").map((event) => [event.orderId, []]));
   schedule.events.filter((event) => event.type === "batch").forEach((event) => byOrder.get(event.orderId).push(event));
   els.ordersTable.innerHTML = `
     <table>
       <thead><tr><th>Order</th><th>Spec</th><th>Bags</th><th>Batches</th><th>Completion</th><th>Loaded</th><th></th></tr></thead>
       <tbody>
-        ${state.orders.map((order) => {
+        ${weekOrders.map((order) => {
           const events = byOrder.get(order.id) || [];
-          const expander = isExpanderOrder(order, state.settings);
-          const completion = events.length ? fmt(minutesToDate(state.settings.weekStart, Math.max(...events.map((event) => event.end)), state.settings)) : expander ? "expanded route" : "not scheduled";
-          const produceBy = produceByDate(order.dueDate, state.settings);
+          const expander = isExpanderOrder(order, settings);
+          const completion = events.length ? fmt(minutesToDate(settings.weekStart, Math.max(...events.map((event) => event.end)), settings)) : expander ? "expanded route" : "not scheduled";
+          const produceBy = produceByDate(order.dueDate, settings);
           return `<tr>
             <td>${escapeHtml(order.customer)}</td>
             <td>${order.family} ${order.size}${order.expanded ? "X" : ""} ${order.grade} ${order.color}${order.preferredReactor ? ` -> ${order.preferredReactor}` : ""}</td>
             <td>${order.quantityBags}</td>
-            <td>${batchesNeeded(order, state.settings)}</td>
+            <td>${batchesNeeded(order, settings)}</td>
             <td>${completion}<div class="table-note">Produce by ${escapeHtml(formatDateValue(produceBy))}<br>Deliver ${escapeHtml(formatDateValue(order.dueDate))}</div></td>
             <td>${events.map((event) => `<button class="secondary" data-action="toggle-loaded" data-batch-id="${event.id}" type="button">${event.status === "loaded" ? "Loaded" : `B${event.sequence}`}</button>`).join(" ")}</td>
             <td><button class="danger" data-action="delete-order" data-order-id="${order.id}" type="button">Delete</button></td>
           </tr>`;
-        }).join("") || `<tr><td colspan="7">No committed orders yet.</td></tr>`}
+        }).join("") || `<tr><td colspan="7">No committed orders for ${week === "next" ? "next" : "this"} week yet.</td></tr>`}
       </tbody>
     </table>
   `;
 }
 
-function renderExpanderOrders(schedule) {
+function renderExpanderOrders(schedule, settings = state.expanderSettings) {
+  const week = state.viewWeek || "this";
+  const weekOrders = expanderOrdersForWeek(state.expanderOrders, week);
   const byOrder = new Map(schedule.events.filter((event) => event.type === "batch").map((event) => [event.orderId, []]));
   schedule.events.filter((event) => event.type === "batch").forEach((event) => byOrder.get(event.orderId).push(event));
   els.expanderOrdersTable.innerHTML = `
     <table>
       <thead><tr><th>Order</th><th>Spec</th><th>Qty</th><th>Batches</th><th>Completion</th><th>Loaded</th><th></th></tr></thead>
       <tbody>
-        ${state.expanderOrders.map((order) => {
+        ${weekOrders.map((order) => {
           const events = byOrder.get(order.id) || [];
-          const completion = events.length ? fmt(expanderMinutesToDate(state.expanderSettings.weekStart, Math.max(...events.map((event) => event.end)), state.expanderSettings)) : "not scheduled";
-          const produceBy = produceByDate(order.dueDate, state.expanderSettings);
+          const completion = events.length ? fmt(expanderMinutesToDate(settings.weekStart, Math.max(...events.map((event) => event.end)), settings)) : "not scheduled";
+          const produceBy = produceByDate(order.dueDate, settings);
           return `<tr>
             <td>${escapeHtml(order.customer)}</td>
             <td>${order.size} ${order.grade} ${order.color}${order.preferredExpander ? ` -> ${order.preferredExpander}` : ""}</td>
             <td>${order.quantity} ${order.orderType === "bulk" ? "truck(s)" : "bags"}</td>
-            <td>${expanderBatchesNeeded(order, state.expanderSettings)}</td>
+            <td>${expanderBatchesNeeded(order, settings)}</td>
             <td>${completion}<div class="table-note">Produce by ${escapeHtml(formatDateValue(produceBy))}<br>Deliver ${escapeHtml(formatDateValue(order.dueDate))}</div></td>
             <td>${events.map((event) => `<button class="secondary" data-action="toggle-expander-loaded" data-batch-id="${event.id}" type="button">${event.status === "loaded" ? "Loaded" : `B${event.sequence}`}</button>`).join(" ")}</td>
             <td><button class="danger" data-action="delete-expander-order" data-order-id="${order.id}" type="button">Delete</button></td>
           </tr>`;
-        }).join("") || `<tr><td colspan="7">No committed expander orders yet.</td></tr>`}
+        }).join("") || `<tr><td colspan="7">No committed expander orders for ${week === "next" ? "next" : "this"} week yet.</td></tr>`}
       </tbody>
     </table>
   `;
 }
 
 function renderUpsizeOptions() {
-  els.upsizeOrder.innerHTML = state.orders.map((order) => `<option value="${order.id}">${escapeHtml(order.customer)} - ${order.size} ${order.color}</option>`).join("");
+  const week = state.viewWeek || "this";
+  const weekOrders = ordersForWeek(state.orders, week);
+  els.upsizeOrder.innerHTML = weekOrders.map((order) => `<option value="${order.id}">${escapeHtml(order.customer)} - ${order.size} ${order.color}</option>`).join("");
 }
 
 function renderExpanderUpsizeOptions() {
-  els.expanderUpsizeOrder.innerHTML = state.expanderOrders.map((order) => `<option value="${order.id}">${escapeHtml(order.customer)} - ${order.size} ${order.color}</option>`).join("");
+  const week = state.viewWeek || "this";
+  const weekExpanderOrders = expanderOrdersForWeek(state.expanderOrders, week);
+  els.expanderUpsizeOrder.innerHTML = weekExpanderOrders.map((order) => `<option value="${order.id}">${escapeHtml(order.customer)} - ${order.size} ${order.color}</option>`).join("");
 }
 
 function renderSettings() {
@@ -1308,31 +1385,31 @@ function updateRulePreviews(kind) {
   preview.textContent = exclusionSentence(readRule(new FormData(formEl), kind, "new"), kind);
 }
 
-function showFitResult(result, el) {
+function showFitResult(result, el, settings = state.settings) {
   if (result.status === "expander") {
     el.textContent = result.message;
     el.className = "result warn";
     return;
   }
-  el.textContent = fitText(result);
+  el.textContent = fitText(result, settings);
   el.className = `result ${result.fits ? "ok" : "warn"}`;
 }
 
-function fitText(result) {
+function fitText(result, settings = state.settings) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
-  const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(state.settings.weekStart, result.completion, state.settings));
+  const completion = result.completion === null ? "not scheduled" : fmt(minutesToDate(settings.weekStart, result.completion, settings));
   const reactors = result.reactors?.length ? result.reactors.join(", ") : "none";
   return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, reactor(s) ${reactors}.`;
 }
 
-function showExpanderFitResult(result, el) {
-  el.textContent = expanderFitText(result);
+function showExpanderFitResult(result, el, settings = state.expanderSettings) {
+  el.textContent = expanderFitText(result, settings);
   el.className = `result ${result.fits ? "ok" : "warn"}`;
 }
 
-function expanderFitText(result) {
+function expanderFitText(result, settings = state.expanderSettings) {
   if (result.message) return `${result.fits ? "Fits" : "Does not fit"}: ${result.message}`;
-  const completion = result.completion === null ? "not scheduled" : fmt(expanderMinutesToDate(state.expanderSettings.weekStart, result.completion, state.expanderSettings));
+  const completion = result.completion === null ? "not scheduled" : fmt(expanderMinutesToDate(settings.weekStart, result.completion, settings));
   const expanders = result.expanders?.length ? result.expanders.join(", ") : "none";
   return `${result.fits ? "Fits" : "Does not fit"}: ${result.batches} batches, completion ${completion}, produce by ${formatDateValue(result.produceByDate)}, deliver ${formatDateValue(result.deliveryDate)}, expander(s) ${expanders}.`;
 }
@@ -1401,12 +1478,12 @@ function dateAxisLabels(weekStart, days, dayStartTime = "00:00") {
   }).join("");
 }
 
-function formatRange(event) {
-  return `${fmt(minutesToDate(state.settings.weekStart, event.start, state.settings))} - ${fmt(minutesToDate(state.settings.weekStart, event.end, state.settings))}`;
+function formatRange(event, settings = state.settings) {
+  return `${fmt(minutesToDate(settings.weekStart, event.start, settings))} - ${fmt(minutesToDate(settings.weekStart, event.end, settings))}`;
 }
 
-function formatExpanderRange(event) {
-  return `${fmt(expanderMinutesToDate(state.expanderSettings.weekStart, event.start, state.expanderSettings))} - ${fmt(expanderMinutesToDate(state.expanderSettings.weekStart, event.end, state.expanderSettings))}`;
+function formatExpanderRange(event, settings = state.expanderSettings) {
+  return `${fmt(expanderMinutesToDate(settings.weekStart, event.start, settings))} - ${fmt(expanderMinutesToDate(settings.weekStart, event.end, settings))}`;
 }
 
 function csv(value) {

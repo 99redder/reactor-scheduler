@@ -65,6 +65,7 @@ function mergeData(base, incoming) {
   return {
     ...base,
     ...incoming,
+    viewWeek: incoming.viewWeek || base.viewWeek || "this",
     settings,
     expanderSettings,
     orders,

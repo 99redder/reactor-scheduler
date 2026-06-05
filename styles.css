@@ -355,6 +355,13 @@ p {
 .section-head {
   justify-content: space-between;
   margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.week-toggle {
+  display: flex;
+  gap: 6px;
 }
 
 .legend span {
