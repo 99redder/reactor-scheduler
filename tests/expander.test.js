@@ -14,7 +14,7 @@ const totalCapacity = settings.expanders
   .reduce((sum, minutes) => sum + minutes, 0);
 
 assert.equal(totalCapacity, 17280, "two expanders should expose 17,280 min/week before changeovers");
-assert.equal(settings.productionLeadDays, 2, "expander production lead time should default to 2 days");
+assert.equal(settings.productionLeadDays, 1, "expander production lead time should default to 1 work day");
 
 assert.equal(expanderBatchesNeeded({ size: "30X", orderType: "bulk", quantity: 1 }, settings), 6);
 assert.equal(expanderBatchesNeeded({ size: "38X", orderType: "bulk", quantity: 1 }, settings), 5);

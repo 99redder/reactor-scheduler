@@ -81,7 +81,7 @@ export function checkExpanderFit(orders, candidateOrder, settings, loadedBatchId
   const events = schedule.events.filter((event) => event.orderId === candidate.id && event.type === "batch");
   const completion = events.length ? Math.max(...events.map((event) => event.end)) : null;
   const produceBy = produceByDate(candidate.dueDate, settings);
-  const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy) : Number.MAX_SAFE_INTEGER;
+  const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy, settings) : Number.MAX_SAFE_INTEGER;
   return {
     status: events.length ? "scheduled" : "blocked",
     message: events.length ? "" : expanderExclusionMessage(candidate, settings),

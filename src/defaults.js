@@ -3,12 +3,16 @@ export const STORAGE_KEY = "reactor-scheduler-v1";
 export function defaultSettings() {
   return {
     weekStart: defaultWeekStart(),
-    batchMinutes: 180,
+    dayStartTime: "07:10",
+    batchMinutes: 192,
+    realisticBatchesPerDay: 7.5,
+    waterBatch: true,
+    waterBatchMinutes: 120,
     daysPerWeek: 6,
     minutesPerDay: 1440,
     shiftLength: 480,
     truckBags: 52,
-    productionLeadDays: 2,
+    productionLeadDays: 1,
     expanderThreshold: 30,
     combineSameSpec: false,
     autoColorAllocation: true,
@@ -106,11 +110,12 @@ export function defaultData() {
 export function defaultExpanderSettings() {
   return {
     weekStart: defaultWeekStart(),
+    dayStartTime: "07:10",
     daysPerWeek: 6,
     minutesPerDay: 1440,
     shiftLength: 480,
     truckBags: 52,
-    productionLeadDays: 2,
+    productionLeadDays: 1,
     efficiency: { globalPercent: 100, byShift: {} },
     colorFlipMinutes: 420,
     sizeChangeoverMinutes: 0,

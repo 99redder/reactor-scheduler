@@ -90,16 +90,26 @@ export function generateStaffedWindows(reactor, settings) {
       windows.push({ start, end, reactorId: reactor.id });
     }
   }
-  if (!reactor.mergeAdjacentWindows) return windows;
-  return windows.reduce((merged, window) => {
-    const prior = merged[merged.length - 1];
+  const merged = !reactor.mergeAdjacentWindows ? windows : windows.reduce((acc, window) => {
+    const prior = acc[acc.length - 1];
     if (prior && prior.end === window.start) {
       prior.end = window.end;
     } else {
-      merged.push({ ...window });
+      acc.push({ ...window });
     }
-    return merged;
+    return acc;
   }, []);
+  if (settings.waterBatch) {
+    const offset = Number(settings.waterBatchMinutes || 0);
+    if (merged[0] && merged[0].start === 0) {
+      if (merged[0].end <= offset) {
+        merged.shift();
+      } else {
+        merged[0] = { ...merged[0], start: offset };
+      }
+    }
+  }
+  return merged;
 }
 
 export function reactorCanRun(reactor, order, settings) {
@@ -219,6 +229,19 @@ export function scheduleOrders(orders, settings, loadedBatchIds = [], skippedBat
     events: [],
     priorBatch: null
   }]));
+  if (settings.waterBatch) {
+    const waterMin = Number(settings.waterBatchMinutes || 0);
+    for (const state of Object.values(reactorStates)) {
+      state.events.push({
+        id: `water-batch-${state.reactor.id}`,
+        type: "water-batch",
+        reactorId: state.reactor.id,
+        start: 0,
+        end: waterMin,
+        label: "Water Batch (warm-up)"
+      });
+    }
+  }
   const unscheduled = [];
   const skipped = new Set(skippedBatchIds);
   const batches = orderBatchesForScheduling(buildBatches(orders, settings).filter((batch) => !skipped.has(batch.id)), settings);
@@ -253,7 +276,7 @@ export function checkCandidateFit(orders, candidateOrder, settings, loadedBatchI
   const candidateEvents = schedule.events.filter((event) => event.orderId === candidate.id && event.type === "batch");
   const completion = candidateEvents.length ? Math.max(...candidateEvents.map((event) => event.end)) : null;
   const produceBy = produceByDate(candidate.dueDate, settings);
-  const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy) : Number.MAX_SAFE_INTEGER;
+  const due = produceBy ? dateToScheduleMinute(settings.weekStart, produceBy, settings) : Number.MAX_SAFE_INTEGER;
   return {
     status: candidateEvents.length ? "scheduled" : "blocked",
     message: candidateEvents.length ? "" : exclusionMessage(candidate, settings),
@@ -406,18 +429,35 @@ function scheduleDateValue(order, settings) {
   return date ? new Date(date).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
-export function minutesToDate(weekStart, minutes) {
-  return new Date(localDateOnly(weekStart).getTime() + minutes * 60000);
+export function parseDayStartMinutes(dayStartTime = "00:00") {
+  const parts = String(dayStartTime || "00:00").split(":");
+  return Number(parts[0] || 0) * 60 + Number(parts[1] || 0);
 }
 
-export function dateToScheduleMinute(weekStart, dateValue) {
-  return Math.max(0, Math.round((new Date(dateValue).getTime() - localDateOnly(weekStart).getTime()) / 60000));
+export function minutesToDate(weekStart, minutes, settings = {}) {
+  const offset = parseDayStartMinutes(settings.dayStartTime);
+  return new Date(localDateOnly(weekStart).getTime() + (offset + minutes) * 60000);
+}
+
+export function dateToScheduleMinute(weekStart, dateValue, settings = {}) {
+  const offset = parseDayStartMinutes(settings.dayStartTime);
+  return Math.max(0, Math.round((new Date(dateValue).getTime() - localDateOnly(weekStart).getTime()) / 60000 - offset));
+}
+
+function isWorkDay(date, settings) {
+  const dow = date.getDay();
+  const prodDayIndex = (dow + 6) % 7;
+  return prodDayIndex < Number(settings.daysPerWeek || 6);
 }
 
 export function produceByDate(dueDate, settings = {}) {
   if (!dueDate) return "";
   const date = new Date(dueDate);
-  date.setDate(date.getDate() - Number(settings.productionLeadDays ?? 2));
+  let daysLeft = Number(settings.productionLeadDays ?? 1);
+  while (daysLeft > 0) {
+    date.setDate(date.getDate() - 1);
+    if (isWorkDay(date, settings)) daysLeft--;
+  }
   return localDateTimeValue(date);
 }
 

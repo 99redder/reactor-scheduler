@@ -21,10 +21,14 @@ const r1Capacity = generateStaffedWindows(r1, settings)
 const r2Capacity = generateStaffedWindows(r2, settings)
   .reduce((sum, win) => sum + Math.floor((win.end - win.start) / settings.batchMinutes), 0);
 
-assert.equal(r1Capacity, 48, "R1 should pack 48 batches at defaults");
-assert.equal(r2Capacity, 29, "R2 should lose capacity to dark shift and stranded minutes");
+assert.equal(r1Capacity, 44, "R1 should pack 44 batches at defaults (192-min batches, water batch trims 120 min from day 0)");
+assert.equal(r2Capacity, 28, "R2 should pack 28 batches at defaults (192-min batches, dark shift, water batch)");
 assert.deepEqual(r3.colors, ["black"], "R3 should be black-only by default");
-assert.equal(settings.productionLeadDays, 2, "reactor production lead time should default to 2 days");
+assert.equal(settings.productionLeadDays, 1, "reactor production lead time should default to 1 work day");
+assert.equal(settings.realisticBatchesPerDay, 7.5, "realistic batches per day should default to 7.5");
+assert.equal(settings.batchMinutes, 192, "batch minutes should default to 192 (= 1440 / 7.5)");
+assert.equal(settings.waterBatch, true, "water batch should be enabled by default");
+assert.equal(settings.waterBatchMinutes, 120, "water batch duration should default to 120 min");
 
 assert.equal(batchesNeeded({ size: 15, family: "HBS", quantityBags: 52 }, settings), 8);
 assert.equal(batchesNeeded({ size: 24, family: "HBS", quantityBags: 52 }, settings), 5);
