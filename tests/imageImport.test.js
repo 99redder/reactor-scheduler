@@ -43,6 +43,17 @@ const { rows: r7, parseError: e7 } = parseExtractedOrders("[]");
 assert.equal(e7, null, "empty array is valid");
 assert.equal(r7.length, 0);
 
+// Valid JSON array with stray text around it
+const wrapped = "Here is the data:\n" + wellFormed + "\nDone.";
+const { rows: r8, parseError: e8 } = parseExtractedOrders(wrapped);
+assert.equal(e8, null, "valid JSON array should be recovered from wrapper text");
+assert.equal(r8.length, 1);
+
+// Truncated JSON should produce a specific retry-oriented error
+const { rows: r9, parseError: e9 } = parseExtractedOrders('[{"company":"Ventek","size"');
+assert.ok(e9?.includes("cut off"), "truncated JSON should be identified clearly");
+assert.equal(r9.length, 0);
+
 console.log("parseExtractedOrders: all checks passed");
 
 // ── inferScreenshotMediaType ──────────────────────────────────────────────────

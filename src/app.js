@@ -401,6 +401,7 @@ document.querySelector("#screenshotExtractBtn").addEventListener("click", async 
   const btn = document.querySelector("#screenshotExtractBtn");
   btn.disabled = true;
   btn.textContent = "Extracting…";
+  btn.classList.add("working");
   setScreenshotStatus("Sending image to the extraction service — this takes a few seconds…", "");
   try {
     const rawText = await extractViaWorker(screenshotState.base64, screenshotState.mediaType, workerUrl);
@@ -416,6 +417,7 @@ document.querySelector("#screenshotExtractBtn").addEventListener("click", async 
   } finally {
     btn.disabled = false;
     btn.textContent = "Extract Orders from Image";
+    btn.classList.remove("working");
   }
 });
 

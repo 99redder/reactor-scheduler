@@ -32,6 +32,39 @@ export function inferScreenshotMediaType(file) {
   return MEDIA_TYPE_BY_EXTENSION[ext] || "";
 }
 
+function findJsonArrayCandidate(text) {
+  const start = text.indexOf("[");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+    } else if (ch === "[") {
+      depth++;
+    } else if (ch === "]") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
 /**
  * POST a base64 image to the configured Worker and return the raw model text.
  * Throws a plain-language Error on network failure, non-OK response, or missing text.
@@ -111,6 +144,26 @@ export function parseExtractedOrders(rawText) {
   try {
     parsed = JSON.parse(text);
   } catch {
+    const candidate = findJsonArrayCandidate(text);
+    if (candidate && candidate !== text) {
+      try {
+        parsed = JSON.parse(candidate);
+      } catch {
+        parsed = null;
+      }
+      if (Array.isArray(parsed)) return { rows: parsed, parseError: null };
+    }
+
+    const looksTruncated = text.startsWith("[") && !findJsonArrayCandidate(text);
+    if (looksTruncated) {
+      return {
+        rows: [],
+        parseError:
+          "The screenshot service response was cut off before all order data came back. " +
+          "Try extracting again; if it keeps happening, split the schedule into a smaller screenshot.",
+      };
+    }
+
     const preview = text.slice(0, 200);
     return {
       rows: [],

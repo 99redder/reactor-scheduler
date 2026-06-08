@@ -55,6 +55,15 @@ button:active, .file-btn:active {
   transform: translateY(1px);
 }
 
+button.working {
+  animation: blink-working .75s ease-in-out infinite alternate;
+}
+
+@keyframes blink-working {
+  from { opacity: 1; }
+  to { opacity: .35; }
+}
+
 button.secondary {
   background: #fff;
   color: var(--ink);
