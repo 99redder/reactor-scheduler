@@ -288,7 +288,7 @@ function parseReactorCsv(text) {
     const truckFillable = isTruckFillable(state.settings, size, family);
     const bags = truckFillable && orderType === "bulk" ? quantity * Number(state.settings.truckBags) : quantity;
     const customerName = customerLabel(company, location) || company;
-    orders.push({
+    const order = {
       company,
       location,
       customer: customerName,
@@ -299,8 +299,11 @@ function parseReactorCsv(text) {
       grade,
       color,
       preferredReactor,
-      expanded: false,
       dueDate
+    };
+    orders.push({
+      ...order,
+      expanded: defaultExpandedForOrder(order, state.settings)
     });
   }
   return { orders, errors };

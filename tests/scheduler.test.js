@@ -6,6 +6,7 @@ import {
   batchesNeeded,
   checkCandidateFit,
   generateStaffedWindows,
+  isExpanderOrder,
   isTruckFillable,
   scheduleOrders,
   visibleYieldFields
@@ -65,6 +66,9 @@ const expander = checkCandidateFit([], {
 }, settings);
 assert.equal(expander.status, "expander");
 assert.match(expander.message, /size-22 base on R3 \+ expander pass/);
+assert.equal(isExpanderOrder({ size: 30, family: "HBS" }, settings), true, "size 30+ should default to expander route");
+assert.equal(isExpanderOrder({ size: 29, family: "HBS" }, settings), false, "sizes below 30 should default to reactor route");
+assert.equal(isExpanderOrder({ size: 30, family: "HBS", expanded: false }, settings), false, "explicit expanded=false should override the 30+ default");
 
 const direct38 = checkCandidateFit([], {
   id: "direct38",

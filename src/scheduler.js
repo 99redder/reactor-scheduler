@@ -17,7 +17,7 @@ export function isExpanderOrder(order, settings) {
   if (typeof order.expanded === "boolean") return order.expanded;
   if (typeof row?.expanded === "boolean") return row.expanded;
   if (typeof row?.expanderRoute === "boolean") return row.expanderRoute;
-  return false;
+  return Number(order.size) >= Number(settings.expanderThreshold);
 }
 
 export function hasExpandedSuffix(productCode = "") {
