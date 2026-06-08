@@ -13,7 +13,7 @@ export function defaultSettings() {
     shiftLength: 480,
     truckBags: 52,
     productionLeadDays: 1,
-    screenshotWorkerUrl: "https://order-extract-worker.99redder.workers.dev",
+    screenshotWorkerUrl: "https://order-extract-worker.99redder.workers.dev/extract",
     expanderThreshold: 30,
     combineSameSpec: false,
     autoColorAllocation: true,
