@@ -638,7 +638,7 @@ document.querySelector("#confirmScreenshotReview").addEventListener("click", () 
       const quantity = Number(row.quantity);
       const truckFillable = isTruckFillable(state.settings, size, family);
       const bags = truckFillable && orderType === "bulk" ? quantity * Number(state.settings.truckBags) : quantity;
-      validOrders.push({
+      const order = {
         company: row.company.trim(),
         location: (row.location || "").trim(),
         customer: customerLabel(row.company.trim(), (row.location || "").trim()) || row.company.trim(),
@@ -649,8 +649,11 @@ document.querySelector("#confirmScreenshotReview").addEventListener("click", () 
         grade: row.grade || "standard",
         color: row.color,
         preferredReactor: "",
-        expanded: false,
         dueDate: row.due_date
+      };
+      validOrders.push({
+        ...order,
+        expanded: defaultExpandedForOrder(order, state.settings)
       });
     }
   });
