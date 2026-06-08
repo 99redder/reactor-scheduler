@@ -479,7 +479,7 @@ function renderReviewTable() {
     const errorHtml = errors.length
       ? `<tr class="review-row-errors"><td colspan="10"><span class="row-error-list">${errors.map(escapeHtml).join(" · ")}</span></td></tr>`
       : "";
-    return `<tr class="${rowClass}">
+    return `<tr class="${rowClass}" data-review-row="${i}">
       ${cell("company", "text")}
       ${cell("location", "text")}
       ${cell("size", "number")}
@@ -524,6 +524,7 @@ document.querySelector("#screenshotReviewTable").addEventListener("input", (e) =
   const { row, field } = e.target.dataset;
   if (row === undefined || !field) return;
   reviewRows[Number(row)][field] = e.target.value;
+  document.querySelector("#screenshotReviewErrors").classList.add("hidden");
   // Re-render validation state without disturbing focused input — just update classes
   updateReviewRowState(Number(row));
 });
@@ -532,6 +533,7 @@ document.querySelector("#screenshotReviewTable").addEventListener("change", (e) 
   const { row, field } = e.target.dataset;
   if (row === undefined || !field) return;
   reviewRows[Number(row)][field] = e.target.value;
+  document.querySelector("#screenshotReviewErrors").classList.add("hidden");
   updateReviewRowState(Number(row));
 });
 
@@ -596,15 +598,27 @@ document.querySelector("#cancelScreenshotReview").addEventListener("click", () =
   document.querySelector("#screenshotReviewErrors").classList.add("hidden");
 });
 
+function focusReviewRow(rowIndex) {
+  const row = document.querySelector(`#screenshotReviewTable tr[data-review-row="${rowIndex}"]`);
+  const firstFlagged = row?.querySelector(".flagged-field [data-field]");
+  const firstInput = row?.querySelector("[data-field]");
+  const target = firstFlagged || firstInput;
+  if (!target) return;
+  target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+  target.focus({ preventScroll: true });
+}
+
 document.querySelector("#confirmScreenshotReview").addEventListener("click", () => {
   const errorsEl = document.querySelector("#screenshotReviewErrors");
   const allErrors = [];
+  let firstInvalidRow = null;
   const validOrders = [];
 
   reviewRows.forEach((row, i) => {
     const result = validateExtractedRow(rawValuesToExtracted(row));
     if (!result.valid) {
       allErrors.push(`Row ${i + 1} (${row.company || "no company"}): ${result.errors.join("; ")}`);
+      if (firstInvalidRow === null) firstInvalidRow = i;
     } else {
       const size = Number(row.size);
       const family = row.family || "HBS";
@@ -631,8 +645,10 @@ document.querySelector("#confirmScreenshotReview").addEventListener("click", () 
   });
 
   if (allErrors.length) {
-    errorsEl.textContent = `Please fix these issues before confirming: ${allErrors.join(" | ")}`;
+    const rowWord = allErrors.length === 1 ? "row needs" : "rows need";
+    errorsEl.textContent = `${allErrors.length} ${rowWord} attention. Edit the highlighted fields in the table, then confirm again.`;
     errorsEl.classList.remove("hidden");
+    focusReviewRow(firstInvalidRow);
     return;
   }
 
