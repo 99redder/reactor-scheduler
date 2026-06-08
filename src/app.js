@@ -54,6 +54,18 @@ function expanderOrdersForWeek(orders, week) {
   return orders.filter((order) => (order.week || "this") === week);
 }
 
+function weekForDueDate(dueDate, settings = state.settings) {
+  const due = new Date(dueDate);
+  if (isNaN(due.getTime())) return state.viewWeek || "this";
+
+  const nextStart = new Date(`${nextWeekStart(settings.weekStart)}T00:00:00`);
+  return due >= nextStart ? "next" : "this";
+}
+
+function earliestWeekForOrders(orders) {
+  return orders.some((order) => order.week === "this") ? "this" : "next";
+}
+
 const els = {
   orderForm: document.querySelector("#orderForm"),
   upsizeForm: document.querySelector("#upsizeForm"),
@@ -230,11 +242,11 @@ document.querySelector("#importReactorCsv").addEventListener("change", async () 
       resultEl.className = "result warn";
       return;
     }
-    const week = state.viewWeek || "this";
-    const newOrders = parsed.map((order) => ({ ...order, week, id: crypto.randomUUID(), createdAt: new Date().toISOString() }));
+    const newOrders = parsed.map((order) => ({ ...order, week: weekForDueDate(order.dueDate), id: crypto.randomUUID(), createdAt: new Date().toISOString() }));
     state.orders = [...state.orders, ...newOrders];
+    state.viewWeek = earliestWeekForOrders(newOrders);
     saveAndRender();
-    resultEl.textContent = `Imported ${newOrders.length} order(s) for ${week === "next" ? "next" : "this"} week.`;
+    resultEl.textContent = `Imported ${newOrders.length} order(s) by due date.`;
     resultEl.className = "result ok";
   } catch (err) {
     resultEl.textContent = `Could not read file: ${err.message}`;
@@ -638,8 +650,7 @@ document.querySelector("#confirmScreenshotReview").addEventListener("click", () 
         color: row.color,
         preferredReactor: "",
         expanded: false,
-        dueDate: row.due_date,
-        week: state.viewWeek || "this"
+        dueDate: row.due_date
       });
     }
   });
@@ -653,12 +664,12 @@ document.querySelector("#confirmScreenshotReview").addEventListener("click", () 
   }
 
   errorsEl.classList.add("hidden");
-  const week = state.viewWeek || "this";
-  const newOrders = validOrders.map((o) => ({ ...o, id: crypto.randomUUID(), createdAt: new Date().toISOString() }));
+  const newOrders = validOrders.map((o) => ({ ...o, week: weekForDueDate(o.dueDate), id: crypto.randomUUID(), createdAt: new Date().toISOString() }));
   state.orders = [...state.orders, ...newOrders];
+  state.viewWeek = earliestWeekForOrders(newOrders);
   saveAndRender();
   document.querySelector("#screenshotReviewModal").classList.add("hidden");
-  setScreenshotStatus(`${newOrders.length} order${newOrders.length === 1 ? "" : "s"} added to ${week === "next" ? "next" : "this"} week's schedule.`, "ok");
+  setScreenshotStatus(`${newOrders.length} order${newOrders.length === 1 ? "" : "s"} added by due date.`, "ok");
 });
 
 els.exportBtn.addEventListener("click", () => {
