@@ -193,6 +193,12 @@ const VALID_FAMILIES = ["HBS", "HBR"];
 const VALID_GRADES = ["standard", "ESD"];
 const VALID_ORDER_TYPES = ["bag", "bulk"];
 
+function normalizeDueDate(value) {
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text}T16:00`;
+  return text;
+}
+
 /**
  * Validate one extracted row.
  * Returns { fields: { [name]: { value, flagged } }, errors: string[], valid: bool }.
@@ -270,7 +276,7 @@ export function validateExtractedRow(row) {
     );
   }
 
-  const dueDateRaw = String(row.due_date || "").trim();
+  const dueDateRaw = normalizeDueDate(row.due_date);
   const dueDateOk = Boolean(dueDateRaw) && !isNaN(new Date(dueDateRaw).getTime());
   fields.due_date = { value: dueDateRaw, flagged: !dueDateOk };
   if (!dueDateOk) {

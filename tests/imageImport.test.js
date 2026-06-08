@@ -133,6 +133,12 @@ const v7 = validateExtractedRow(badDate);
 assert.equal(v7.valid, false);
 assert.equal(v7.fields.due_date.flagged, true);
 
+// Date-only values should default to the normal delivery time
+const dateOnly = { ...validRow, due_date: "2026-06-14" };
+const vDateOnly = validateExtractedRow(dateOnly);
+assert.equal(vDateOnly.valid, true);
+assert.equal(vDateOnly.fields.due_date.value, "2026-06-14T16:00");
+
 // Partial nulls — only some fields null
 const partialNull = { ...validRow, size: null, quantity: null };
 const v8 = validateExtractedRow(partialNull);
