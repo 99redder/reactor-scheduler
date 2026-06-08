@@ -8,6 +8,30 @@
 
 // ── Worker call ───────────────────────────────────────────────────────────────
 
+export const SUPPORTED_IMAGE_MEDIA_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+
+const MEDIA_TYPE_BY_EXTENSION = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+export function inferScreenshotMediaType(file) {
+  const explicitType = String(file?.type || "").trim().toLowerCase();
+  if (SUPPORTED_IMAGE_MEDIA_TYPES.has(explicitType)) return explicitType;
+
+  const name = String(file?.name || "").trim().toLowerCase();
+  const ext = name.includes(".") ? name.split(".").pop() : "";
+  return MEDIA_TYPE_BY_EXTENSION[ext] || "";
+}
+
 /**
  * POST a base64 image to the configured Worker and return the raw model text.
  * Throws a plain-language Error on network failure, non-OK response, or missing text.

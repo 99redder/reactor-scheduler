@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseExtractedOrders, validateExtractedRow } from "../src/imageImport.js";
+import { inferScreenshotMediaType, parseExtractedOrders, validateExtractedRow } from "../src/imageImport.js";
 
 // ── parseExtractedOrders ──────────────────────────────────────────────────────
 
@@ -44,6 +44,31 @@ assert.equal(e7, null, "empty array is valid");
 assert.equal(r7.length, 0);
 
 console.log("parseExtractedOrders: all checks passed");
+
+// ── inferScreenshotMediaType ──────────────────────────────────────────────────
+
+assert.equal(
+  inferScreenshotMediaType({ name: "schedule.png", type: "" }),
+  "image/png",
+  ".png files should be accepted even when the browser omits the MIME type",
+);
+assert.equal(
+  inferScreenshotMediaType({ name: "schedule.PNG", type: "application/octet-stream" }),
+  "image/png",
+  ".PNG extension should override generic upload MIME types",
+);
+assert.equal(
+  inferScreenshotMediaType({ name: "schedule.txt", type: "text/plain" }),
+  "",
+  "non-image files should not be accepted",
+);
+assert.equal(
+  inferScreenshotMediaType({ name: "camera-upload", type: "image/jpeg" }),
+  "image/jpeg",
+  "valid image MIME types should still be accepted without an extension",
+);
+
+console.log("inferScreenshotMediaType: all checks passed");
 
 // ── validateExtractedRow ──────────────────────────────────────────────────────
 

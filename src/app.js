@@ -1,5 +1,5 @@
 import { dataStore } from "./storage.js";
-import { extractViaWorker, parseExtractedOrders, validateExtractedRow } from "./imageImport.js";
+import { extractViaWorker, inferScreenshotMediaType, parseExtractedOrders, validateExtractedRow } from "./imageImport.js";
 import {
   batchesNeeded,
   checkCandidateFit,
@@ -339,8 +339,9 @@ function updateScreenshotAvailability() {
 }
 
 function setScreenshotImage(file) {
-  if (!file || !file.type.startsWith("image/")) {
-    setScreenshotStatus("That file doesn't look like an image (PNG, JPG, or WebP expected).", "warn");
+  const mediaType = inferScreenshotMediaType(file);
+  if (!mediaType) {
+    setScreenshotStatus("That file doesn't look like an image (PNG, JPG, WebP, or GIF expected).", "warn");
     return;
   }
   const reader = new FileReader();
@@ -348,7 +349,7 @@ function setScreenshotImage(file) {
     const dataUrl = e.target.result;
     const comma = dataUrl.indexOf(",");
     screenshotState.base64 = dataUrl.slice(comma + 1);
-    screenshotState.mediaType = file.type;
+    screenshotState.mediaType = mediaType;
     screenshotState.dataUrl = dataUrl;
     document.querySelector("#screenshotPreviewThumb").src = dataUrl;
     document.querySelector("#screenshotPreviewWrap").classList.remove("hidden");
