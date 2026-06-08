@@ -469,8 +469,10 @@ function renderReviewTable() {
       const flagClass = f.flagged ? "flagged-field" : "";
       const title = f.flagged ? `couldn't read — please check` : "";
       if (type === "select") {
+        const hasValue = opts.includes(row[name]);
+        const blankOption = hasValue ? "" : `<option value="" selected>Choose</option>`;
         const options = opts.map((o) => `<option value="${o}" ${row[name] === o ? "selected" : ""}>${o}</option>`).join("");
-        return `<td class="${flagClass}"><select data-row="${i}" data-field="${name}" title="${escapeAttr(title)}">${options}</select></td>`;
+        return `<td class="${flagClass}"><select data-row="${i}" data-field="${name}" title="${escapeAttr(title)}">${blankOption}${options}</select></td>`;
       }
       return `<td class="${flagClass}"><input type="${type}" data-row="${i}" data-field="${name}" value="${val}" placeholder="${escapeAttr(title || name)}" title="${escapeAttr(title)}"></td>`;
     };
