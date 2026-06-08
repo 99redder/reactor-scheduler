@@ -15,9 +15,10 @@ export function findYield(settings, size, family) {
 export function isExpanderOrder(order, settings) {
   const row = findYield(settings, order.size, order.family);
   if (typeof order.expanded === "boolean") return order.expanded;
+  if (Number(order.size) >= Number(settings.expanderThreshold)) return true;
   if (typeof row?.expanded === "boolean") return row.expanded;
   if (typeof row?.expanderRoute === "boolean") return row.expanderRoute;
-  return Number(order.size) >= Number(settings.expanderThreshold);
+  return false;
 }
 
 export function hasExpandedSuffix(productCode = "") {
